@@ -483,169 +483,10 @@ class WC_Optima_API
     }
 
     /**
-     * Reserve product in Optima
-     * 
-     * @param string $product_id Optima product ID
-     * @param int $quantity Quantity to reserve
-     * @return bool True if reservation was successful, false otherwise
-     */
-    public function reserve_product($product_id, $quantity)
-    {
-        $token = $this->get_access_token();
-
-        if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token for product reservation');
-            return false;
-        }
-
-        $reservation_data = [
-            'product_id' => $product_id,
-            'quantity' => $quantity,
-            'expiration' => 15 // minutes
-        ];
-
-        try {
-            // Check if GuzzleHttp exists
-            if (!class_exists('\\GuzzleHttp\\Client')) {
-                // Since Guzzle isn't available, use WordPress HTTP API
-                return $this->reserve_product_with_wp_http($token, $reservation_data);
-            }
-
-            $client = new \GuzzleHttp\Client();
-
-            $options = [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $token,
-                    'Content-Type' => 'application/json'
-                ],
-                'body' => json_encode($reservation_data)
-            ];
-
-            $response = $client->request('POST', $this->api_url . '/ProductReservations', $options);
-            $result = json_decode($response->getBody()->getContents(), true);
-
-            return isset($result['success']) && $result['success'] === true;
-        } catch (Exception $e) {
-            error_log('WC Optima Integration: Error reserving product - ' . $e->getMessage());
-            // Fall back to WordPress HTTP API
-            return $this->reserve_product_with_wp_http($token, $reservation_data);
-        }
-
-        return false;
-    }
-
-    /**
-     * Reserve product using WordPress HTTP API as a fallback
-     * 
-     * @param string $token The access token
-     * @param array $reservation_data Reservation data
-     * @return bool True if reservation was successful, false otherwise
-     */
-    private function reserve_product_with_wp_http($token, $reservation_data)
-    {
-        $response = wp_remote_post($this->api_url . '/ProductReservations', [
-            'timeout' => 45,
-            'redirection' => 5,
-            'httpversion' => '1.0',
-            'headers' => [
-                'Authorization' => 'Bearer ' . $token,
-                'Content-Type' => 'application/json'
-            ],
-            'body' => json_encode($reservation_data)
-        ]);
-
-        if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
-            return false;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $result = json_decode($body, true);
-
-        return isset($result['success']) && $result['success'] === true;
-    }
-
-    /**
-     * Verify product stock availability in Optima
-     * 
-     * @param array $products Array of products with Optima product IDs and quantities
-     * @return array Results with availability status for each product
-     */
-    public function verify_stock_availability($products)
-    {
-        $token = $this->get_access_token();
-
-        if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token for stock verification');
-            return ['success' => false, 'message' => 'Authentication failed'];
-        }
-
-        try {
-            // Check if GuzzleHttp exists
-            if (!class_exists('\\GuzzleHttp\\Client')) {
-                // Since Guzzle isn't available, use WordPress HTTP API
-                return $this->verify_stock_with_wp_http($token, $products);
-            }
-
-            $client = new \GuzzleHttp\Client();
-
-            $options = [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $token,
-                    'Content-Type' => 'application/json'
-                ],
-                'body' => json_encode(['products' => $products])
-            ];
-
-            $response = $client->request('POST', $this->api_url . '/VerifyStock', $options);
-            $result = json_decode($response->getBody()->getContents(), true);
-
-            return $result;
-        } catch (Exception $e) {
-            error_log('WC Optima Integration: Error verifying stock - ' . $e->getMessage());
-            // Fall back to WordPress HTTP API
-            return $this->verify_stock_with_wp_http($token, $products);
-        }
-
-        return ['success' => false, 'message' => 'Unknown error occurred'];
-    }
-
-    /**
-     * Verify stock using WordPress HTTP API as a fallback
-     * 
-     * @param string $token The access token
-     * @param array $products Array of products with Optima product IDs and quantities
-     * @return array Results with availability status for each product
-     */
-    private function verify_stock_with_wp_http($token, $products)
-    {
-        $response = wp_remote_post($this->api_url . '/VerifyStock', [
-            'timeout' => 45,
-            'redirection' => 5,
-            'httpversion' => '1.0',
-            'headers' => [
-                'Authorization' => 'Bearer ' . $token,
-                'Content-Type' => 'application/json'
-            ],
-            'body' => json_encode(['products' => $products])
-        ]);
-
-        if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
-            return ['success' => false, 'message' => $response->get_error_message()];
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $result = json_decode($body, true);
-
-        return $result;
-    }
-
-    /**
-     * Create RO (Receiver Reservation) document in Optima
+     * Create RO document in Optima
      * 
      * @param array $order_data Order data in Optima format
-     * @return array|false Order document data if created, false on failure
+     * @return array|false New document data if created, false on failure
      */
     public function create_ro_document($order_data)
     {
@@ -690,8 +531,8 @@ class WC_Optima_API
      * Create RO document using WordPress HTTP API as a fallback
      * 
      * @param string $token The access token
-     * @param array $order_data Order data in Optima format
-     * @return array|false Order document data if created, false on failure
+     * @param array $order_data Order data
+     * @return array|false New document data if created, false on failure
      */
     private function create_ro_with_wp_http($token, $order_data)
     {
@@ -718,10 +559,9 @@ class WC_Optima_API
     }
 
     /**
-     * Get documents from Optima API
+     * Get RO documents from Optima API
      * 
-     * @param int $limit Optional. Maximum number of documents to return. Default 50.
-     * @return array|false Array of documents or false on failure
+     * @return array|false Array of RO documents or false on failure
      */
     public function get_ro_documents()
     {
@@ -744,7 +584,7 @@ class WC_Optima_API
             $options = [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $token
-                ],
+                ]
             ];
 
             $response = $client->request('GET', $this->api_url . '/Documents', $options);
@@ -752,7 +592,7 @@ class WC_Optima_API
 
             return $documents;
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error getting documents - ' . $e->getMessage());
+            error_log('WC Optima Integration: Error getting RO documents - ' . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->get_ro_documents_with_wp_http($token);
         }
@@ -761,11 +601,11 @@ class WC_Optima_API
     }
 
     /**
-     * Get documents using WordPress HTTP API as a fallback
-     * 
+     * Get RO documents using WordPress HTTP API as a fallback
+     *
      * @param string $token The access token
-     * @param int $limit Maximum number of documents to return
-     * @return array|false Array of documents or false on failure
+     * @param int $limit Optional. Maximum number of documents to return. Default 0 (all documents).
+     * @return array|false Array of RO documents or false on failure
      */
     private function get_ro_documents_with_wp_http($token, $limit = 0)
     {
@@ -775,9 +615,6 @@ class WC_Optima_API
             'httpversion' => '1.0',
             'headers' => [
                 'Authorization' => 'Bearer ' . $token
-            ],
-            'body' => [
-                'limit' => $limit
             ]
         ]);
 
@@ -788,6 +625,11 @@ class WC_Optima_API
 
         $body = wp_remote_retrieve_body($response);
         $documents = json_decode($body, true);
+
+        // Apply limit if specified
+        if ($limit > 0 && is_array($documents)) {
+            $documents = array_slice($documents, 0, $limit);
+        }
 
         return $documents;
     }

@@ -63,10 +63,7 @@ class WC_Optima_Product_Sync
                 // Use item code as the key for lookup since we use code as SKU
                 $stock_lookup[$warehouse_data['itemCode']] = [
                     'quantity' => isset($warehouse_data['quantity']) ? floatval($warehouse_data['quantity']) : 0,
-                    'reservation' => isset($warehouse_data['reservation']) ? floatval($warehouse_data['reservation']) : 0,
-                    'available' => isset($warehouse_data['quantity']) ?
-                        (floatval($warehouse_data['quantity']) -
-                            (isset($warehouse_data['reservation']) ? floatval($warehouse_data['reservation']) : 0)) : 0,
+                    'available' => isset($warehouse_data['quantity']) ? floatval($warehouse_data['quantity']) : 0,
                     'unit' => isset($warehouse_data['unit']) ? $warehouse_data['unit'] : '',
                     'warehouse_id' => isset($warehouse_data['warehouseId']) ? $warehouse_data['warehouseId'] : 0
                 ];

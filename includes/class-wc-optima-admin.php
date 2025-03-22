@@ -555,10 +555,6 @@ class WC_Optima_Admin
                         <span><?php echo isset($stock_data['quantity']) ? esc_html($stock_data['quantity']) : '0'; ?></span>
                     </p>
                     <p class="form-field">
-                        <label><?php _e('Reserved', 'wc-optima-integration'); ?></label>
-                        <span><?php echo isset($stock_data['reservation']) ? esc_html($stock_data['reservation']) : '0'; ?></span>
-                    </p>
-                    <p class="form-field">
                         <label><?php _e('Available', 'wc-optima-integration'); ?></label>
                         <span><?php echo isset($stock_data['available']) ? esc_html($stock_data['available']) : '0'; ?></span>
                     </p>
