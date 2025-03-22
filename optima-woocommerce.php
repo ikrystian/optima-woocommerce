@@ -69,6 +69,19 @@ class WC_Optima_Integration
         // Register activation and deactivation hooks
         register_activation_hook(__FILE__, array($this, 'activate_plugin'));
         register_deactivation_hook(__FILE__, array($this, 'deactivate_plugin'));
+
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_styles'));
+    }
+
+    /**
+     * Enqueue admin styles
+     */
+    public function enqueue_admin_styles()
+    {
+        wp_enqueue_style(
+            'wc-optima-admin-styles',
+            plugins_url('admin-styles.css', __FILE__)
+        );
     }
 
     /**

@@ -1,0 +1,6 @@
+/* Custom admin styles for product edit view */
+#optima_product_data {
+  .options_group {
+    padding-inline: 1rem;
+  }
+}
