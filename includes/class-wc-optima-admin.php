@@ -45,6 +45,9 @@ class WC_Optima_Admin
         add_action('wp_ajax_wc_optima_fetch_customers', array($this, 'ajax_fetch_customers'));
         add_action('wp_ajax_wc_optima_create_sample_customer', array($this, 'ajax_create_sample_customer'));
 
+        // Add AJAX handler for RO documents
+        add_action('wp_ajax_wc_optima_fetch_ro_documents', array($this, 'ajax_fetch_ro_documents'));
+
         // Add Optima customer ID to user profile
         add_action('show_user_profile', array($this, 'display_optima_customer_id_field'));
         add_action('edit_user_profile', array($this, 'display_optima_customer_id_field'));
@@ -77,7 +80,8 @@ class WC_Optima_Admin
             // Add the ajax url to the script
             wp_localize_script('wc-optima-admin-scripts', 'wc_optima_params', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('wc_optima_fetch_customers')
+                'nonce' => wp_create_nonce('wc_optima_fetch_customers'),
+                'ro_nonce' => wp_create_nonce('wc_optima_fetch_ro_documents')
             ));
         }
     }
@@ -170,6 +174,36 @@ class WC_Optima_Admin
     }
 
     /**
+     * AJAX handler for fetching RO documents
+     */
+    public function ajax_fetch_ro_documents()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_ro_documents')) {
+            wp_send_json_error('Invalid security token');
+            return;
+        }
+
+        // Get API instance
+        $api = WC_Optima_Integration::get_api_instance();
+        if (!$api) {
+            wp_send_json_error('API not initialized');
+            return;
+        }
+
+        // Get RO documents with limit
+        $documents = $api->get_ro_documents();
+
+        if (!$documents) {
+            wp_send_json_error('Failed to fetch RO documents from Optima API');
+            return;
+        }
+
+        // Send success response
+        wp_send_json_success($documents);
+    }
+
+    /**
      * Register plugin settings
      */
     public function register_settings()
@@ -254,6 +288,7 @@ class WC_Optima_Admin
             <h2 class="nav-tab-wrapper">
                 <a href="?page=wc-optima-integration&tab=sync" class="nav-tab <?php echo $active_tab === 'sync' ? 'nav-tab-active' : ''; ?>">Synchronization</a>
                 <a href="?page=wc-optima-integration&tab=customers" class="nav-tab <?php echo $active_tab === 'customers' ? 'nav-tab-active' : ''; ?>">Customers</a>
+                <a href="?page=wc-optima-integration&tab=rco" class="nav-tab <?php echo $active_tab === 'rco' ? 'nav-tab-active' : ''; ?>">RCO</a>
                 <a href="?page=wc-optima-integration&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">Settings</a>
             </h2>
 
@@ -360,6 +395,30 @@ class WC_Optima_Admin
                         </div>
 
                         <div id="wc-optima-customers-results" style="margin-top: 20px;">
+                            <!-- Results will be displayed here -->
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+            <?php elseif ($active_tab === 'rco'): ?>
+
+                <div class="optima-rco-section">
+                    <h2>Optima RO Documents</h2>
+
+                    <?php if (empty($this->options['api_url']) || empty($this->options['username']) || empty($this->options['password'])): ?>
+                        <div class="notice notice-warning">
+                            <p>Please configure API settings before fetching RO documents. Go to the <a href="?page=wc-optima-integration&tab=settings">Settings tab</a>.</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="optima-rco-actions">
+                            <button id="wc-optima-fetch-ro-documents" class="button button-primary">Get Latest RO Documents</button>
+                        </div>
+
+                        <div id="wc-optima-ro-documents-loading" style="display: none;">
+                            <p><span class="spinner is-active" style="float: none;"></span> Loading RO documents...</p>
+                        </div>
+
+                        <div id="wc-optima-ro-documents-results" style="margin-top: 20px;">
                             <!-- Results will be displayed here -->
                         </div>
                     <?php endif; ?>

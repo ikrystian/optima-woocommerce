@@ -35,3 +35,43 @@
 #wc-optima-customers-results {
   margin-top: 20px;
 }
+
+/* RO Documents table styles */
+.optima-rco-section {
+  margin-top: 20px;
+}
+
+.optima-rco-actions {
+  margin: 20px 0;
+  display: flex;
+  gap: 10px;
+}
+
+.optima-rco-section table.ro-documents {
+  margin-top: 15px;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.optima-rco-section table.ro-documents th,
+.optima-rco-section table.ro-documents td {
+  padding: 8px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Make the table horizontally scrollable */
+.optima-rco-section #wc-optima-ro-documents-results {
+  overflow-x: auto;
+}
+
+#wc-optima-ro-documents-loading {
+  margin: 20px 0;
+}
+
+#wc-optima-ro-documents-results {
+  margin-top: 20px;
+}

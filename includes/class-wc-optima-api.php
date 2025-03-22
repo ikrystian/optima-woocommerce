@@ -376,6 +376,7 @@ class WC_Optima_API
      * Get customers using WordPress HTTP API as a fallback
      * 
      * @param string $token The access token
+     * @param int $limit Optional. Maximum number of customers to return. Default 0 (all customers).
      * @return array|false Array of customers or false on failure
      */
     private function get_customers_with_wp_http($token, $limit = 0)
@@ -672,7 +673,7 @@ class WC_Optima_API
                 'body' => json_encode($order_data)
             ];
 
-            $response = $client->request('POST', $this->api_url . '/RODocument', $options);
+            $response = $client->request('POST', $this->api_url . '/Documents', $options);
             $result = json_decode($response->getBody()->getContents(), true);
 
             return $result;
@@ -694,7 +695,7 @@ class WC_Optima_API
      */
     private function create_ro_with_wp_http($token, $order_data)
     {
-        $response = wp_remote_post($this->api_url . '/RODocument', [
+        $response = wp_remote_post($this->api_url . '/Documents', [
             'timeout' => 45,
             'redirection' => 5,
             'httpversion' => '1.0',
@@ -714,5 +715,80 @@ class WC_Optima_API
         $result = json_decode($body, true);
 
         return $result;
+    }
+
+    /**
+     * Get documents from Optima API
+     * 
+     * @param int $limit Optional. Maximum number of documents to return. Default 50.
+     * @return array|false Array of documents or false on failure
+     */
+    public function get_ro_documents()
+    {
+        $token = $this->get_access_token();
+
+        if (!$token) {
+            error_log('WC Optima Integration: Failed to get access token');
+            return false;
+        }
+
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->get_ro_documents_with_wp_http($token);
+            }
+
+            $client = new \GuzzleHttp\Client();
+
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token
+                ],
+            ];
+
+            $response = $client->request('GET', $this->api_url . '/Documents', $options);
+            $documents = json_decode($response->getBody()->getContents(), true);
+
+            return $documents;
+        } catch (Exception $e) {
+            error_log('WC Optima Integration: Error getting documents - ' . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->get_ro_documents_with_wp_http($token);
+        }
+
+        return false;
+    }
+
+    /**
+     * Get documents using WordPress HTTP API as a fallback
+     * 
+     * @param string $token The access token
+     * @param int $limit Maximum number of documents to return
+     * @return array|false Array of documents or false on failure
+     */
+    private function get_ro_documents_with_wp_http($token, $limit = 0)
+    {
+        $response = wp_remote_get($this->api_url . '/Documents', [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token
+            ],
+            'body' => [
+                'limit' => $limit
+            ]
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $documents = json_decode($body, true);
+
+        return $documents;
     }
 }

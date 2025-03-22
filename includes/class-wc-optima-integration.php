@@ -141,7 +141,7 @@ class WC_Optima_Integration
      * Plugin activation: schedule daily sync
      */
     public function activate_plugin()
-    
+    {
         // Clear any existing scheduled events
         $timestamp = wp_next_scheduled('wc_optima_daily_sync');
         if ($timestamp) {
@@ -187,7 +187,8 @@ class WC_Optima_Integration
     public function reserve_product_in_cart($cart_item_key, $product_id, $quantity, $variation_id, $variation, $cart_item_data)
     {
         // Get the Optima product ID (stored as meta in WooCommerce product)
-        $optima_product_id = get_post_meta($variation_id ? $variation_id : $product_id, 'optima_product_id', true);
+        $optima_product_id = get_post_meta($variation_id ? $variation_id : $product_id, '_optima_id', true);
+
 
         if (empty($optima_product_id)) {
             error_log('WC Optima Integration: No Optima product ID found for product ' . $product_id);
@@ -195,7 +196,7 @@ class WC_Optima_Integration
         }
 
         // Reserve the product in Optima
-        $reserved = $this->api->reserve_product($optima_product_id, $quantity);
+        $reserved = self::$api->reserve_product($optima_product_id, $quantity);
 
         if ($reserved) {
             // Store reservation info in cart item data for expiration check
@@ -248,7 +249,7 @@ class WC_Optima_Integration
             ]
         ];
 
-        $result = $this->api->verify_stock_availability($products);
+        $result = self::$api->verify_stock_availability($products);
 
         if (!$result || !isset($result['success']) || !$result['success']) {
             // Product is not available or error occurred
@@ -337,7 +338,7 @@ class WC_Optima_Integration
         }
 
         // Verify stock availability in Optima
-        $result = $this->api->verify_stock_availability($products_to_verify);
+        $result = self::$api->verify_stock_availability($products_to_verify);
 
         if (!$result || !isset($result['success']) || !$result['success']) {
             // Error occurred during verification
@@ -394,44 +395,86 @@ class WC_Optima_Integration
 
         // Prepare order data for Optima
         $order_data = [
-            'order_id' => $order_id,
-            'order_number' => $order->get_order_number(),
-            'customer_id' => get_post_meta($order_id, 'optima_customer_id', true),
-            'date' => $order->get_date_created()->date('Y-m-d H:i:s'),
-            'products' => []
+            'type' => 302, // RO document type
+            'foreignNumber' => 'WC_' . $order->get_order_number(),
+            'calculatedOn' => 1, // 1 = gross, 2 = net
+            'paymentMethod' => 'przelew', // Fixed payment method that is known to work with Optima
+            'currency' => $order->get_currency(),
+            'elements' => [],
+            'description' => 'Order #' . $order->get_order_number() . ' from WooCommerce',
+            'status' => 1,
+            'sourceWarehouseId' => 1, // Default warehouse ID
+            'documentSaleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
+            'documentIssueDate' => date('Y-m-d\TH:i:s'),
+            'documentPaymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
+            'symbol' => 'RO',
+            'series' => 'WC'
         ];
+
+        // Add customer data if available
+        $customer_id = get_post_meta($order_id, 'optima_customer_id', true);
+        if (!empty($customer_id)) {
+            $order_data['payerId'] = $customer_id;
+        }
 
         // Add products to order data
         foreach ($order->get_items() as $item) {
             $product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
-            $optima_product_id = get_post_meta($product_id, 'optima_product_id', true);
+            $product = wc_get_product($product_id);
 
-            if (!empty($optima_product_id)) {
-                $order_data['products'][] = [
-                    'product_id' => $optima_product_id,
-                    'quantity' => $item->get_quantity(),
-                    'price' => $item->get_total()
-                ];
+            if (!$product) {
+                continue;
             }
+
+            $optima_id = get_post_meta($product_id, '_optima_id', true);
+            $optima_vat_rate = get_post_meta($product_id, '_optima_vat_rate', true);
+
+            if (empty($optima_vat_rate)) {
+                $optima_vat_rate = 23; // Default VAT rate if not set
+            }
+
+            $quantity = $item->get_quantity();
+            $unit_price = $item->get_total() / $quantity;
+            $unit_price_with_tax = $item->get_total_tax() > 0 ? ($item->get_total() + $item->get_total_tax()) / $quantity : $unit_price * (1 + ($optima_vat_rate / 100));
+
+            $element = [
+                'code' => $product->get_sku() ? $product->get_sku() : 'WC_' . $product_id,
+                'manufacturerCode' => '',
+                'unitNetPrice' => round($unit_price, 2),
+                'unitGrossPrice' => round($unit_price_with_tax, 2),
+                'totalNetValue' => round($item->get_total(), 2),
+                'totalGrossValue' => round($item->get_total() + $item->get_total_tax(), 2),
+                'quantity' => $quantity,
+                'vatRate' => floatval($optima_vat_rate),
+                'setCustomValue' => true
+            ];
+
+            // Add itemId if we have an Optima ID
+            if (!empty($optima_id)) {
+                $element['itemId'] = $optima_id;
+            }
+
+            $order_data['elements'][] = $element;
         }
 
-        if (empty($order_data['products'])) {
+        if (empty($order_data['elements'])) {
             error_log('WC Optima Integration: No products with Optima ID found in order ' . $order_id);
             return;
         }
 
         // Create RO document in Optima
-        $result = $this->api->create_ro_document($order_data);
+        $result = self::$api->create_ro_document($order_data);
 
-        if ($result && isset($result['document_id'])) {
+        if ($result && isset($result['id'])) {
             // Store the RO document ID in the order meta
-            update_post_meta($order_id, 'optima_ro_document_id', $result['document_id']);
+            update_post_meta($order_id, 'optima_ro_document_id', $result['id']);
 
             // Add a note to the order
             $order->add_order_note(
                 sprintf(
-                    __('Optima RO document created: %s', 'optima-woocommerce'),
-                    $result['document_id']
+                    __('Optima RO document created: %s (%s)', 'optima-woocommerce'),
+                    $result['id'],
+                    $result['fullNumber'] ?? ''
                 )
             );
         } else {
