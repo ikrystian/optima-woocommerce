@@ -40,10 +40,21 @@ class WC_Optima_Admin
         // Add product meta data display in admin
         add_filter('woocommerce_product_data_tabs', array($this, 'add_optima_product_data_tab'));
         add_action('woocommerce_product_data_panels', array($this, 'display_optima_meta_data_panel'));
+
+        // Add AJAX handlers for customer operations
+        add_action('wp_ajax_wc_optima_fetch_customers', array($this, 'ajax_fetch_customers'));
+        add_action('wp_ajax_wc_optima_create_sample_customer', array($this, 'ajax_create_sample_customer'));
+
+        // Add Optima customer ID to user profile
+        add_action('show_user_profile', array($this, 'display_optima_customer_id_field'));
+        add_action('edit_user_profile', array($this, 'display_optima_customer_id_field'));
+
+        // Add Optima customer ID to order view
+        add_action('woocommerce_admin_order_data_after_billing_address', array($this, 'display_optima_customer_id_in_order'));
     }
 
     /**
-     * Enqueue admin styles
+     * Enqueue admin styles and scripts
      */
     public function enqueue_admin_styles()
     {
@@ -51,6 +62,111 @@ class WC_Optima_Admin
             'wc-optima-admin-styles',
             plugins_url('admin-styles.css', OPTIMA_WC_PLUGIN_FILE)
         );
+
+        // Only load scripts on our admin page
+        $screen = get_current_screen();
+        if ($screen && $screen->id === 'woocommerce_page_wc-optima-integration') {
+            wp_enqueue_script(
+                'wc-optima-admin-scripts',
+                plugins_url('admin-scripts.js', OPTIMA_WC_PLUGIN_FILE),
+                array('jquery'),
+                '1.0.0',
+                true
+            );
+
+            // Add the ajax url to the script
+            wp_localize_script('wc-optima-admin-scripts', 'wc_optima_params', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('wc_optima_fetch_customers')
+            ));
+        }
+    }
+
+    /**
+     * AJAX handler for fetching customers
+     */
+    public function ajax_fetch_customers()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_customers')) {
+            wp_send_json_error('Invalid security token');
+            return;
+        }
+
+        // Get API instance
+        $api = WC_Optima_Integration::get_api_instance();
+        if (!$api) {
+            wp_send_json_error('API not initialized');
+            return;
+        }
+
+        // Get customers with limit
+        $customers = $api->get_optima_customers();
+
+        if (!$customers) {
+            wp_send_json_error('Failed to fetch customers from Optima API');
+            return;
+        }
+
+        // Send success response
+        wp_send_json_success($customers);
+    }
+
+    /**
+     * AJAX handler for creating a sample customer
+     */
+    public function ajax_create_sample_customer()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_customers')) {
+            wp_send_json_error('Invalid security token');
+            return;
+        }
+
+        // Get API instance
+        $api = WC_Optima_Integration::get_api_instance();
+        if (!$api) {
+            wp_send_json_error('API not initialized');
+            return;
+        }
+
+        // Create sample customer data
+        $customer_data = [
+            'code' => 'WC_' . substr(date('Ymd_His'), 0, 15),
+            'name1' => 'Test Account',
+            'name2' => 'Test Account',
+            'name3' => '',
+            'vatNumber' => '6616681238',
+            'country' => 'Poland',
+            'city' => 'Warsaw',
+            'street' => 'Sample Street',
+            'additionalAdress' => 'Apt 123',
+            'postCode' => '00-001',
+            'houseNumber' => '10',
+            'flatNumber' => '5',
+            'phone1' => '+48 123 456 789',
+            'phone2' => '',
+            'inactive' => 0,
+            'defaultPrice' => 0,
+            'regon' => '123456789',
+            'email' => 'sample.customer' . rand(1000, 9999) . '@example.com',
+            'paymentMethod' => 'gotówka',
+            'dateOfPayment' => 0,
+            'maxPaymentDelay' => 0,
+            'description' => 'Sample customer created from WooCommerce',
+            'countryCode' => 'PL'
+        ];
+
+        // Create customer in Optima
+        $result = $api->create_optima_customer($customer_data);
+
+        if (!$result) {
+            wp_send_json_error('Failed to create sample customer in Optima API');
+            return;
+        }
+
+        // Send success response
+        wp_send_json_success($result);
     }
 
     /**
@@ -137,6 +253,7 @@ class WC_Optima_Admin
 
             <h2 class="nav-tab-wrapper">
                 <a href="?page=wc-optima-integration&tab=sync" class="nav-tab <?php echo $active_tab === 'sync' ? 'nav-tab-active' : ''; ?>">Synchronization</a>
+                <a href="?page=wc-optima-integration&tab=customers" class="nav-tab <?php echo $active_tab === 'customers' ? 'nav-tab-active' : ''; ?>">Customers</a>
                 <a href="?page=wc-optima-integration&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">Settings</a>
             </h2>
 
@@ -222,6 +339,31 @@ class WC_Optima_Admin
                 ?>
 
 
+
+            <?php elseif ($active_tab === 'customers'): ?>
+
+                <div class="optima-customers-section">
+                    <h2>Optima Customers</h2>
+
+                    <?php if (empty($this->options['api_url']) || empty($this->options['username']) || empty($this->options['password'])): ?>
+                        <div class="notice notice-warning">
+                            <p>Please configure API settings before fetching customers. Go to the <a href="?page=wc-optima-integration&tab=settings">Settings tab</a>.</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="optima-customer-actions">
+                            <button id="wc-optima-create-customer" class="button button-secondary">Add Sample Customer</button>
+                            <button id="wc-optima-fetch-customers" class="button button-primary">Get Latest 50 Customers</button>
+                        </div>
+
+                        <div id="wc-optima-customers-loading" style="display: none;">
+                            <p><span class="spinner is-active" style="float: none;"></span> Loading customers...</p>
+                        </div>
+
+                        <div id="wc-optima-customers-results" style="margin-top: 20px;">
+                            <!-- Results will be displayed here -->
+                        </div>
+                    <?php endif; ?>
+                </div>
 
             <?php elseif ($active_tab === 'settings'): ?>
 
@@ -363,6 +505,61 @@ class WC_Optima_Admin
                     </p>
                 <?php endif; ?>
             </div>
+        </div>
+    <?php
+    }
+
+    /**
+     * Display Optima customer ID field in user profile
+     *
+     * @param WP_User $user The user object being edited
+     */
+    public function display_optima_customer_id_field($user)
+    {
+        // Get the Optima customer ID
+        $optima_customer_id = get_user_meta($user->ID, '_optima_customer_id', true);
+
+        // Only display if we have an Optima customer ID
+        if (empty($optima_customer_id)) {
+            return;
+        }
+
+    ?>
+        <h3><?php _e('Optima Integration', 'wc-optima-integration'); ?></h3>
+        <table class="form-table">
+            <tr>
+                <th><label for="optima_customer_id"><?php _e('Optima Customer ID', 'wc-optima-integration'); ?></label></th>
+                <td>
+                    <input type="text" name="optima_customer_id" id="optima_customer_id" value="<?php echo esc_attr($optima_customer_id); ?>" class="regular-text" readonly />
+                    <p class="description"><?php _e('This is the customer ID in the Optima system.', 'wc-optima-integration'); ?></p>
+                </td>
+            </tr>
+        </table>
+    <?php
+    }
+
+    /**
+     * Display Optima customer ID in order view
+     *
+     * @param WC_Order $order The order object
+     */
+    public function display_optima_customer_id_in_order($order)
+    {
+        // Get the Optima customer ID from order meta
+        $optima_customer_id = $order->get_meta('_optima_customer_id', true);
+
+        // Only display if we have an Optima customer ID
+        if (empty($optima_customer_id)) {
+            return;
+        }
+
+    ?>
+        <div class="order_data_column">
+            <h4><?php _e('Optima Integration', 'wc-optima-integration'); ?></h4>
+            <p>
+                <strong><?php _e('Optima Customer ID:', 'wc-optima-integration'); ?></strong>
+                <?php echo esc_html($optima_customer_id); ?>
+            </p>
         </div>
 <?php
     }

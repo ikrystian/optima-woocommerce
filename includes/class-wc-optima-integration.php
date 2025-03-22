@@ -21,7 +21,7 @@ class WC_Optima_Integration
      *
      * @var WC_Optima_API
      */
-    private $api;
+    private static $api;
 
     /**
      * Instance of the admin handler
@@ -115,16 +115,26 @@ class WC_Optima_Integration
     private function init_components()
     {
         // Initialize API handler
-        $this->api = new WC_Optima_API($this->options);
+        self::$api = new WC_Optima_API($this->options);
 
         // Initialize Admin handler
         $this->admin = new WC_Optima_Admin($this->options);
 
         // Initialize Product Sync handler
-        $this->product_sync = new WC_Optima_Product_Sync($this->api);
+        $this->product_sync = new WC_Optima_Product_Sync(self::$api);
 
         // Initialize Customer handler
-        $this->customer = new WC_Optima_Customer($this->api);
+        $this->customer = new WC_Optima_Customer(self::$api);
+    }
+
+    /**
+     * Get API instance
+     * 
+     * @return WC_Optima_API|null API instance or null if not initialized
+     */
+    public static function get_api_instance()
+    {
+        return self::$api;
     }
 
     /**

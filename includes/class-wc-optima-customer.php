@@ -42,6 +42,7 @@ class WC_Optima_Customer
      */
     public function process_customer_for_optima($order_id, $posted_data, $order)
     {
+
         // Get customer ID from order
         $customer_id = $order->get_customer_id();
 
@@ -188,8 +189,8 @@ class WC_Optima_Customer
         // Prepare customer data for Optima
         $customer_data = [
             'code' => $customer_code,
-            'name1' => $name1,
-            'name2' => !empty($company) ? trim($first_name . ' ' . $last_name) : '',
+            'name1' => $first_name,
+            'name2' => $last_name,
             'name3' => '',
             'vatNumber' => $vat_number,
             'country' => $country_name,
@@ -197,19 +198,19 @@ class WC_Optima_Customer
             'street' => $address_1,
             'additionalAdress' => $address_2,
             'postCode' => $postcode,
-            'houseNumber' => '', // Not directly available in WooCommerce
-            'flatNumber' => '', // Not directly available in WooCommerce
+            'houseNumber' => '',
+            'flatNumber' => '',
             'phone1' => $phone,
             'phone2' => '',
             'inactive' => 0,
             'defaultPrice' => 0,
-            'regon' => '', // Not directly available in WooCommerce
+            'regon' => '',
             'email' => $email,
-            'paymentMethod' => 'gotówka', // Default payment method
+            'paymentMethod' => 'gotówka',
             'dateOfPayment' => 0,
             'maxPaymentDelay' => 0,
-            'description' => 'Customer created from WooCommerce order #' . $order->get_id(),
-            'countryCode' => $country_iso
+            'description' => 'Customer created from WooCommerce ',
+            'countryCode' => 'PL'
         ];
 
         return $customer_data;
