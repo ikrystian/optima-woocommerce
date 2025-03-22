@@ -44,7 +44,6 @@ class WC_Optima_Integration
 
     public function __construct()
     {
-
         // Initialize options
         $this->options = get_option('wc_optima_settings', [
             'api_url' => '',
@@ -71,6 +70,9 @@ class WC_Optima_Integration
         register_deactivation_hook(__FILE__, array($this, 'deactivate_plugin'));
 
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_styles'));
+
+        // Add hook for customer creation in Optima
+        add_action('woocommerce_checkout_order_processed', array($this, 'process_customer_for_optima'), 10, 3);
     }
 
     /**
@@ -700,6 +702,35 @@ class WC_Optima_Integration
     }
 
     /**
+     * Get existing product SKUs from WooCommerce
+     * 
+     * @return array Associative array of product SKUs to product IDs
+     */
+    private function get_existing_product_skus()
+    {
+        global $wpdb;
+        
+        $results = $wpdb->get_results(
+            "SELECT p.ID, pm.meta_value as sku
+            FROM {$wpdb->posts} p
+            LEFT JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id AND pm.meta_key = '_sku'
+            WHERE p.post_type IN ('product', 'product_variation')
+            AND p.post_status != 'trash'
+            AND pm.meta_value != ''",
+            ARRAY_A
+        );
+        
+        $skus = array();
+        if ($results) {
+            foreach ($results as $result) {
+                $skus[$result['sku']] = $result['ID'];
+            }
+        }
+        
+        return $skus;
+    }
+
+    /**
      * Main function to synchronize products
      */
     public function sync_products()
@@ -766,7 +797,8 @@ class WC_Optima_Integration
 
             // Additional product metadata for WooCommerce custom fields
             $meta_data = [
-                '_optima_id' => isset($product['id']) ? $product['id'] : '',
+                '_optima_id' => isset($product['id']) ? $product['id']
+                : '',
                 '_optima_type' => isset($product['type']) ? $product['type'] : '',
                 '_optima_vat_rate' => isset($product['vatRate']) ? $product['vatRate'] : '',
                 '_optima_unit' => isset($product['unit']) ? $product['unit'] : '',
@@ -780,185 +812,118 @@ class WC_Optima_Integration
             // Add all prices as custom meta fields
             if (!empty($formatted_prices)) {
                 foreach ($formatted_prices as $price_key => $price_value) {
-                    $meta_data['_optima_' . $price_key] = $price_value;
+                    $meta_data['_' . $price_key] = $price_value;
                 }
             }
 
-            // Add VAT rate as custom field
-            if (isset($product['vatRate'])) {
-                $meta_data['_tax_status'] = 'taxable';
-                $meta_data['_tax_class'] = ''; // Default tax class
-            }
-
-            // Add catalog number as SKU if original SKU is empty
-            if (empty($sku) && isset($product['catalogNumber']) && !empty($product['catalogNumber'])) {
-                $sku = $product['catalogNumber'];
-            }
-
-            if (!$sku || !$name) {
-                continue; // Skip products without required fields
-            }
-
-            // Check if product exists in WooCommerce
+            // Check if product exists in WooCommerce by SKU
             if (isset($existing_products[$sku])) {
-                // Update existing product
-                $this->update_product(
-                    $existing_products[$sku],
-                    $stock_quantity,
-                    $price,
-                );
-                $products_updated++;
+                // Product exists, update it
+                $product_id = $existing_products[$sku];
+                
+                // Update product data
+                $wc_product = wc_get_product($product_id);
+                
+                if ($wc_product) {
+                    // Update basic product data
+                    $wc_product->set_name($name);
+                    $wc_product->set_description($description);
+                    $wc_product->set_regular_price($price);
+                    $wc_product->set_stock_quantity($stock_quantity);
+                    $wc_product->set_manage_stock(true);
+                    $wc_product->set_stock_status($stock_quantity > 0 ? 'instock' : 'outofstock');
+                    
+                    // Set dimensions if available
+                    if ($height > 0) $wc_product->set_height($height);
+                    if ($width > 0) $wc_product->set_width($width);
+                    if ($length > 0) $wc_product->set_length($length);
+                    
+                    // Set category if available
+                    if ($category_id > 0) {
+                        $wc_product->set_category_ids([$category_id]);
+                    }
+                    
+                    // Update meta data
+                    foreach ($meta_data as $meta_key => $meta_value) {
+                        $wc_product->update_meta_data($meta_key, $meta_value);
+                    }
+                    
+                    // Save the product
+                    $wc_product->save();
+                    
+                    $products_updated++;
+                }
             } else {
-                // Create new product
-                $this->create_product(
-                    $sku,
-                    $name,
-                    $description,
-                    $stock_quantity,
-                    $price,
-                    $category_id,
-                    $height,
-                    $width,
-                    $length,
-                    $meta_data
-                );
-                $products_added++;
+                // Product doesn't exist, create it
+                $new_product = [
+                    'post_title' => $name,
+                    'post_content' => $description,
+                    'post_status' => 'publish',
+                    'post_type' => 'product',
+                ];
+                
+                $product_id = wp_insert_post($new_product);
+                
+                if (!is_wp_error($product_id)) {
+                    // Set product data
+                    $wc_product = wc_get_product($product_id);
+                    
+                    // Set product type (simple by default)
+                    wp_set_object_terms($product_id, 'simple', 'product_type');
+                    
+                    // Set SKU
+                    $wc_product->set_sku($sku);
+                    
+                    // Set price
+                    $wc_product->set_regular_price($price);
+                    
+                    // Set stock
+                    $wc_product->set_manage_stock(true);
+                    $wc_product->set_stock_quantity($stock_quantity);
+                    $wc_product->set_stock_status($stock_quantity > 0 ? 'instock' : 'outofstock');
+                    
+                    // Set dimensions if available
+                    if ($height > 0) $wc_product->set_height($height);
+                    if ($width > 0) $wc_product->set_width($width);
+                    if ($length > 0) $wc_product->set_length($length);
+                    
+                    // Set category if available
+                    if ($category_id > 0) {
+                        $wc_product->set_category_ids([$category_id]);
+                    }
+                    
+                    // Add meta data
+                    foreach ($meta_data as $meta_key => $meta_value) {
+                        $wc_product->update_meta_data($meta_key, $meta_value);
+                    }
+                    
+                    // Save the product
+                    $wc_product->save();
+                    
+                    $products_added++;
+                }
             }
         }
-
-        // Update statistics
+        
+        // Update sync statistics
         update_option('wc_optima_last_sync', current_time('mysql'));
         update_option('wc_optima_products_added', $products_added);
         update_option('wc_optima_products_updated', $products_updated);
-
+        
         error_log(sprintf('WC Optima Integration: Sync completed. Added: %d, Updated: %d', $products_added, $products_updated));
     }
 
     /**
-     * Get existing WooCommerce products with their SKUs as keys
-     */
-    private function get_existing_product_skus()
-    {
-        $existing_products = array();
-
-        $args = array(
-            'post_type' => 'product',
-            'posts_per_page' => -1,
-            'fields' => 'ids',
-        );
-
-        $product_ids = get_posts($args);
-
-        foreach ($product_ids as $product_id) {
-            $sku = get_post_meta($product_id, '_sku', true);
-            if ($sku) {
-                $existing_products[$sku] = $product_id;
-            }
-        }
-
-        return $existing_products;
-    }
-
-    /**
-     * Create a new WooCommerce product
-     */
-    private function create_product($sku, $name, $description, $stock, $price, $category_id = 0, $height = 0, $width = 0, $length = 0, $meta_data = [])
-    {
-        $product = new WC_Product_Simple();
-
-        $product->set_name($name);
-        $product->set_description($description);
-        $product->set_description($description);
-        $product->set_sku($sku);
-        $product->set_regular_price($price);
-        $product->set_manage_stock(true);
-        $product->set_stock_quantity($stock);
-        $product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
-
-        // Set dimensions
-        if ($height > 0) {
-            $product->set_height($height);
-        }
-
-        if ($width > 0) {
-            $product->set_width($width);
-        }
-
-        if ($length > 0) {
-            $product->set_length($length);
-        }
-
-
-        // Save product to get the ID
-        $product_id = $product->save();
-
-        // Set additional meta data
-        if (!empty($meta_data)) {
-            foreach ($meta_data as $meta_key => $meta_value) {
-                update_post_meta($product_id, $meta_key, $meta_value);
-            }
-        }
-
-        // Set product category if provided
-        if ($category_id > 0) {
-            wp_set_object_terms($product_id, $category_id, 'product_cat');
-        }
-
-        return $product_id;
-    }
-
-    /**
-     * Update an existing WooCommerce product
-     */
-    private function update_product($product_id, $stock, $price)
-    {
-        $product = wc_get_product($product_id);
-
-        if (!$product) {
-            return false;
-        }
-
-        // Update basic product information
-        $product->set_regular_price($price);
-        $product->set_manage_stock(true);
-
-        // Always update stock quantity from Optima
-        $product->set_stock_quantity($stock);
-        $product->set_stock_status($stock > 0 ? 'instock' : 'outofstock');
-
-        // Save all product changes
-        $product->save();
-
-        return true;
-    }
-
-    /**
-     * Add a new product data tab for Optima data
+     * Add a new tab to the product data metabox
      */
     public function add_optima_product_data_tab($tabs)
     {
-        // Check if this product has Optima data
-        global $post;
-
-        if (!$post) {
-            return $tabs;
-        }
-
-        $product_id = $post->ID;
-        $optima_id = get_post_meta($product_id, '_optima_id', true);
-        $optima_catalog_number = get_post_meta($product_id, '_optima_catalog_number', true);
-        $optima_barcode = get_post_meta($product_id, '_optima_barcode', true);
-
-        // Only add the tab if we have Optima data
-        if (!empty($optima_id) || !empty($optima_catalog_number) || !empty($optima_barcode)) {
-            $tabs['optima'] = array(
-                'label'    => __('Optima', 'wc-optima-integration'),
-                'target'   => 'optima_product_data',
-                'class'    => array('show_if_simple', 'show_if_variable'),
-                'priority' => 21,
-            );
-        }
-
+        $tabs['optima'] = array(
+            'label'    => __('Optima', 'wc-optima-integration'),
+            'target'   => 'optima_product_data',
+            'class'    => array(),
+            'priority' => 90
+        );
         return $tabs;
     }
 
@@ -989,133 +954,387 @@ class WC_Optima_Integration
         }
 
         // Start the Optima data panel
-    ?>
+        ?>
         <div id="optima_product_data" class="panel woocommerce_options_panel">
             <div class="options_group">
-                <h3><?php _e('Optima Product Data', 'wc-optima-integration'); ?></h3>
-
-                <?php if (!empty($optima_id)): ?>
-                    <p class="form-field">
-                        <label><?php _e('Optima ID', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_id); ?>
-                    </p>
-                <?php endif; ?>
-
-                <?php if (!empty($optima_type)): ?>
-                    <p class="form-field">
-                        <label><?php _e('Type', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_type); ?>
-                    </p>
-                <?php endif; ?>
-
-                <?php if (!empty($optima_vat_rate)): ?>
-                    <p class="form-field">
-                        <label><?php _e('VAT Rate', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_vat_rate); ?>%
-                    </p>
-                <?php endif; ?>
-
-                <?php if (!empty($optima_unit)): ?>
-                    <p class="form-field">
-                        <label><?php _e('Unit', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_unit); ?>
-                    </p>
-                <?php endif; ?>
-
-                <?php if (!empty($optima_barcode)): ?>
-                    <p class="form-field">
-                        <label><?php _e('Barcode', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_barcode); ?>
-                    </p>
-                <?php endif; ?>
-
-                <?php if (!empty($optima_catalog_number)): ?>
-                    <p class="form-field">
-                        <label><?php _e('Catalog Number', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_catalog_number); ?>
-                    </p>
-                <?php endif; ?>
-
-                <?php if (!empty($optima_default_group)): ?>
-                    <p class="form-field">
-                        <label><?php _e('Default Group', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_default_group); ?>
-                    </p>
-                <?php endif; ?>
-
-                <?php if (!empty($optima_sales_category)): ?>
-                    <p class="form-field">
-                        <label><?php _e('Sales Category', 'wc-optima-integration'); ?>:</label>
-                        <?php echo esc_html($optima_sales_category); ?>
-                    </p>
-                <?php endif; ?>
-
-                <?php
-                // Display stock data if available
-                if (!empty($optima_stock_data)) {
+                <p class="form-field">
+                    <label><?php _e('Optima ID', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_id); ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Catalog Number', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_catalog_number); ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Barcode', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_barcode); ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Type', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_type); ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('VAT Rate', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_vat_rate); ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Unit', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_unit); ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Default Group', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_default_group); ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Sales Category', 'wc-optima-integration'); ?></label>
+                    <span><?php echo esc_html($optima_sales_category); ?></span>
+                </p>
+                <?php if (!empty($optima_stock_data)) : 
                     $stock_data = json_decode($optima_stock_data, true);
-                    if (is_array($stock_data)) {
-                        echo '<h4>' . __('Stock Information', 'wc-optima-integration') . '</h4>';
-
-                        if (isset($stock_data['quantity'])) {
-                            echo '<p class="form-field">';
-                            echo '<label>' . __('Total Quantity', 'wc-optima-integration') . ':</label>';
-                            echo esc_html($stock_data['quantity']);
-                            echo '</p>';
-                        }
-
-                        if (isset($stock_data['reservation'])) {
-                            echo '<p class="form-field">';
-                            echo '<label>' . __('Reserved', 'wc-optima-integration') . ':</label>';
-                            echo esc_html($stock_data['reservation']);
-                            echo '</p>';
-                        }
-
-                        if (isset($stock_data['available'])) {
-                            echo '<p class="form-field">';
-                            echo '<label>' . __('Available', 'wc-optima-integration') . ':</label>';
-                            echo esc_html($stock_data['available']);
-                            echo '</p>';
-                        }
-
-                        if (isset($stock_data['warehouse_id'])) {
-                            echo '<p class="form-field">';
-                            echo '<label>' . __('Warehouse ID', 'wc-optima-integration') . ':</label>';
-                            echo esc_html($stock_data['warehouse_id']);
-                            echo '</p>';
-                        }
-                    }
-                }
-
-                // Display price information
-                $all_meta = get_post_meta($product_id);
-                $price_fields = array();
-
-                foreach ($all_meta as $meta_key => $meta_value) {
-                    if (strpos($meta_key, '_optima_price_') === 0) {
-                        $price_name = str_replace('_optima_price_', '', $meta_key);
-                        $price_name = str_replace('_', ' ', $price_name);
-                        $price_name = ucwords($price_name);
-                        $price_fields[$price_name] = $meta_value[0];
-                    }
-                }
-
-                if (!empty($price_fields)) {
-                    echo '<h4>' . __('Price Information', 'wc-optima-integration') . '</h4>';
-
-                    foreach ($price_fields as $name => $value) {
-                        echo '<p class="form-field">';
-                        echo '<label>' . esc_html($name) . ':</label>';
-                        echo wc_price($value);
-                        echo '</p>';
-                    }
-                }
                 ?>
-
-                <p class="description"><?php _e('This data is synchronized from Optima and is read-only.', 'wc-optima-integration'); ?></p>
+                <p class="form-field">
+                    <label><?php _e('Stock Quantity', 'wc-optima-integration'); ?></label>
+                    <span><?php echo isset($stock_data['quantity']) ? esc_html($stock_data['quantity']) : '0'; ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Reserved', 'wc-optima-integration'); ?></label>
+                    <span><?php echo isset($stock_data['reservation']) ? esc_html($stock_data['reservation']) : '0'; ?></span>
+                </p>
+                <p class="form-field">
+                    <label><?php _e('Available', 'wc-optima-integration'); ?></label>
+                    <span><?php echo isset($stock_data['available']) ? esc_html($stock_data['available']) : '0'; ?></span>
+                </p>
+                <?php endif; ?>
             </div>
         </div>
-<?php
+        <?php
+    }
+
+    /**
+     * Process customer for Optima when a new order is placed
+     * 
+     * @param int $order_id The WooCommerce order ID
+     * @param array $posted_data The posted data from checkout
+     * @param WC_Order $order The WooCommerce order object
+     */
+    public function process_customer_for_optima($order_id, $posted_data, $order) {
+        // Check if API credentials are configured
+        if (empty($this->api_url) || empty($this->username) || empty($this->password)) {
+            error_log('WC Optima Integration: API credentials not configured.');
+            return;
+        }
+
+        // Get customer ID from order
+        $customer_id = $order->get_customer_id();
+        
+        // Check if we already have an Optima customer ID for this user
+        $optima_customer_id = '';
+        
+        if ($customer_id > 0) {
+            // Registered user - check user meta
+            $optima_customer_id = get_user_meta($customer_id, '_optima_customer_id', true);
+        } else {
+            // Guest order - check if we can find by email
+            $customer_email = $order->get_billing_email();
+            
+            // Check if this email already has an Optima customer ID in any previous orders
+            $existing_orders = wc_get_orders(array(
+                'billing_email' => $customer_email,
+                'limit' => 1,
+                'orderby' => 'date',
+                'order' => 'DESC',
+                'exclude' => array($order_id), // Exclude current order
+            ));
+            
+            if (!empty($existing_orders)) {
+                $existing_order = reset($existing_orders);
+                $optima_customer_id = $existing_order->get_meta('_optima_customer_id', true);
+            }
+        }
+        
+        // If we already have an Optima customer ID, update the order and return
+        if (!empty($optima_customer_id)) {
+            $order->update_meta_data('_optima_customer_id', $optima_customer_id);
+            $order->save();
+            return;
+        }
+        
+        // Check if customer exists in Optima by email
+        $customer_email = $order->get_billing_email();
+        $customer_vat = $order->get_meta('_billing_vat', true); // Assuming VAT is stored in this meta field
+        
+        $optima_customer = $this->check_customer_exists_in_optima($customer_email, $customer_vat);
+        
+        if ($optima_customer) {
+            // Customer exists in Optima, save the ID
+            $optima_customer_id = $optima_customer['id'];
+        } else {
+            // Customer doesn't exist, create a new one
+            $customer_data = $this->map_wc_customer_to_optima($customer_id, $order);
+            $new_customer = $this->create_optima_customer($customer_data);
+            
+            if ($new_customer && isset($new_customer['id'])) {
+                $optima_customer_id = $new_customer['id'];
+            } else {
+                error_log('WC Optima Integration: Failed to create customer in Optima');
+                return;
+            }
+        }
+        
+        // Save Optima customer ID to order meta
+        $order->update_meta_data('_optima_customer_id', $optima_customer_id);
+        $order->save();
+        
+        // If this is a registered user, also save to user meta
+        if ($customer_id > 0) {
+            update_user_meta($customer_id, '_optima_customer_id', $optima_customer_id);
+        }
+        
+        error_log(sprintf('WC Optima Integration: Customer ID %s assigned to order %s', $optima_customer_id, $order_id));
+    }
+
+    /**
+     * Get customers from Optima API
+     * 
+     * @return array|false Array of customers or false on failure
+     */
+    private function get_optima_customers() {
+        $token = $this->get_access_token();
+        
+        if (!$token) {
+            error_log('WC Optima Integration: Failed to get access token');
+            return false;
+        }
+        
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->get_customers_with_wp_http($token);
+            }
+            
+            $client = new \GuzzleHttp\Client();
+            
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token
+                ]
+            ];
+            
+            $response = $client->request('GET', $this->api_url . '/Customers', $options);
+            $customers = json_decode($response->getBody()->getContents(), true);
+            
+            return $customers;
+        } catch (Exception $e) {
+            error_log('WC Optima Integration: Error getting customers - ' . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->get_customers_with_wp_http($token);
+        }
+        
+        return false;
+    }
+
+    /**
+     * Get customers using WordPress HTTP API as a fallback
+     * 
+     * @param string $token The access token
+     * @return array|false Array of customers or false on failure
+     */
+    private function get_customers_with_wp_http($token) {
+        $response = wp_remote_get($this->api_url . '/Customers', [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token
+            ]
+        ]);
+        
+        if (is_wp_error($response)) {
+            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            return false;
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        $customers = json_decode($body, true);
+        
+        return $customers;
+    }
+
+    /**
+     * Check if a customer exists in Optima
+     * 
+     * @param string $email Customer email
+     * @param string $vat_number Customer VAT number (optional)
+     * @return array|false Customer data if found, false otherwise
+     */
+    private function check_customer_exists_in_optima($email, $vat_number = '') {
+        $customers = $this->get_optima_customers();
+        
+        if (!$customers || !is_array($customers)) {
+            return false;
+        }
+        
+        // First try to find by email (most reliable)
+        if (!empty($email)) {
+            foreach ($customers as $customer) {
+                if (isset($customer['email']) && strtolower($customer['email']) === strtolower($email)) {
+                    return $customer;
+                }
+            }
+        }
+        
+        // If not found by email and VAT number is provided, try to find by VAT
+        if (!empty($vat_number)) {
+            foreach ($customers as $customer) {
+                if (isset($customer['vatNumber']) && $customer['vatNumber'] === $vat_number) {
+                    return $customer;
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Create a new customer in Optima
+     * 
+     * @param array $customer_data Customer data in Optima format
+     * @return array|false New customer data if created, false on failure
+     */
+    private function create_optima_customer($customer_data) {
+        $token = $this->get_access_token();
+        
+        if (!$token) {
+            error_log('WC Optima Integration: Failed to get access token');
+            return false;
+        }
+        
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->create_customer_with_wp_http($token, $customer_data);
+            }
+            
+            $client = new \GuzzleHttp\Client();
+            
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json'
+                ],
+                'body' => json_encode($customer_data)
+            ];
+            
+            $response = $client->request('POST', $this->api_url . '/Customers', $options);
+            $result = json_decode($response->getBody()->getContents(), true);
+            
+            return $result;
+        } catch (Exception $e) {
+            error_log('WC Optima Integration: Error creating customer - ' . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->create_customer_with_wp_http($token, $customer_data);
+        }
+        
+        return false;
+    }
+
+    /**
+     * Create customer using WordPress HTTP API as a fallback
+     * 
+     * @param string $token The access token
+     * @param array $customer_data Customer data in Optima format
+     * @return array|false New customer data if created, false on failure
+     */
+    private function create_customer_with_wp_http($token, $customer_data) {
+        $response = wp_remote_post($this->api_url . '/Customers', [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode($customer_data)
+        ]);
+        
+        if (is_wp_error($response)) {
+            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            return false;
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        $result = json_decode($body, true);
+        
+        return $result;
+    }
+
+    /**
+     * Map WooCommerce customer data to Optima format
+     * 
+     * @param int $customer_id WooCommerce customer ID
+     * @param WC_Order $order WooCommerce order object
+     * @return array Customer data in Optima format
+     */
+    private function map_wc_customer_to_optima($customer_id, $order) {
+        // Generate a unique customer code
+        $customer_code = 'WC_' . date('Ymd') . '_' . $order->get_id();
+        
+        // Get customer name
+        $first_name = $order->get_billing_first_name();
+        $last_name = $order->get_billing_last_name();
+        $company = $order->get_billing_company();
+        
+        // Determine name1 (company name or full name)
+        $name1 = !empty($company) ? $company : trim($first_name . ' ' . $last_name);
+        
+        // Get VAT number (assuming it's stored in a custom field)
+        $vat_number = $order->get_meta('_billing_vat', true);
+        
+        // Get address details
+        $country = $order->get_billing_country();
+        $city = $order->get_billing_city();
+        $address_1 = $order->get_billing_address_1();
+        $address_2 = $order->get_billing_address_2();
+        $postcode = $order->get_billing_postcode();
+        
+        // Get contact details
+        $phone = $order->get_billing_phone();
+        $email = $order->get_billing_email();
+        
+        // Map country code to ISO code
+        $country_iso = $country;
+        $country_name = WC()->countries->countries[$country] ?? $country;
+        
+        // Prepare customer data for Optima
+        $customer_data = [
+            'code' => $customer_code,
+            'name1' => $name1,
+            'name2' => !empty($company) ? trim($first_name . ' ' . $last_name) : '',
+            'name3' => '',
+            'vatNumber' => $vat_number,
+            'country' => $country_name,
+            'city' => $city,
+            'street' => $address_1,
+            'additionalAdress' => $address_2,
+            'postCode' => $postcode,
+            'houseNumber' => '', // Not directly available in WooCommerce
+            'flatNumber' => '', // Not directly available in WooCommerce
+            'phone1' => $phone,
+            'phone2' => '',
+            'inactive' => 0,
+            'defaultPrice' => 0,
+            'regon' => '', // Not directly available in WooCommerce
+            'email' => $email,
+            'paymentMethod' => 'gotówka', // Default payment method
+            'dateOfPayment' => 0,
+            'maxPaymentDelay' => 0,
+            'description' => 'Customer created from WooCommerce order #' . $order->get_id(),
+            'countryCode' => $country_iso
+        ];
+        
+        return $customer_data;
     }
 }
 
