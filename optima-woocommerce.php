@@ -56,6 +56,16 @@ function wc_optima_init()
 
     // Initialize the plugin
     new WC_Optima_Integration();
+
+    /**
+     * Generate random prefix for order number
+     */
+    function wc_optima_generate_random_order_number($order_id)
+    {
+        $prefix = rand(1000, 9999);
+        return $prefix . $order_id;
+    }
+    add_filter('woocommerce_order_number', 'wc_optima_generate_random_order_number', 10, 1);
 }
 
 // Initialize the plugin on plugins loaded

@@ -183,7 +183,7 @@ class WC_Optima_Integration
         $ro_document_id = get_post_meta($order_id, 'optima_ro_document_id', true);
 
         if (!empty($ro_document_id)) {
-            error_log('WC Optima Integration: RO document already exists for order ' . $order_id);
+            error_log(message: 'WC Optima Integration: RO document already exists for order ' . $order_id);
             return;
         }
 
@@ -276,7 +276,7 @@ class WC_Optima_Integration
             $order->add_order_note(
                 __('Failed to create Optima RO document.', 'optima-woocommerce')
             );
-            error_log('WC Optima Integration: Failed to create RO document for order ' . $order_id);
+            error_log(message: 'WC Optima Integration: Failed to create RO document for order ' . $order_id);
         }
     }
 }
