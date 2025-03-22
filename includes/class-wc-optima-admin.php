@@ -54,6 +54,8 @@ class WC_Optima_Admin
 
         // Add Optima customer ID to order view
         add_action('woocommerce_admin_order_data_after_billing_address', array($this, 'display_optima_customer_id_in_order'));
+
+        add_action('wp_ajax_wc_optima_search_ro_document', array($this, 'ajax_search_ro_document'));
     }
 
     /**
@@ -172,7 +174,43 @@ class WC_Optima_Admin
         // Send success response
         wp_send_json_success($result);
     }
+    /**
+     * AJAX handler for searching RO document by ID
+     */
+    public function ajax_search_ro_document()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_ro_documents')) {
+            wp_send_json_error('Invalid security token');
+            return;
+        }
 
+        // Check if document ID is provided
+        if (!isset($_POST['document_id']) || empty($_POST['document_id'])) {
+            wp_send_json_error('Document ID is required');
+            return;
+        }
+
+        $document_id = sanitize_text_field($_POST['document_id']);
+
+        // Get API instance
+        $api = WC_Optima_Integration::get_api_instance();
+        if (!$api) {
+            wp_send_json_error('API not initialized');
+            return;
+        }
+
+        // Get specific document by ID
+        $document = $api->get_ro_document_by_id($document_id);
+
+        if (!$document) {
+            wp_send_json_error('Document not found with ID: ' . $document_id);
+            return;
+        }
+
+        // Send success response
+        wp_send_json_success($document);
+    }
     /**
      * AJAX handler for fetching RO documents
      */
@@ -413,6 +451,35 @@ class WC_Optima_Admin
                         <div class="optima-rco-actions">
                             <button id="wc-optima-fetch-ro-documents" class="button button-primary">Get Latest RO Documents</button>
                         </div>
+
+                        <div class="optima-rco-section">
+                            <h2>Optima RO Documents</h2>
+
+                            <?php if (empty($this->options['api_url']) || empty($this->options['username']) || empty($this->options['password'])): ?>
+                                <div class="notice notice-warning">
+                                    <p>Please configure API settings before fetching RO documents. Go to the <a href="?page=wc-optima-integration&tab=settings">Settings tab</a>.</p>
+                                </div>
+                            <?php else: ?>
+                                <div class="optima-search-document">
+                                    <label for="wc-optima-document-id">Document ID:</label>
+                                    <input type="text" id="wc-optima-document-id" name="document_id" placeholder="Enter document ID">
+                                    <button id="wc-optima-search-ro-document" class="button">Search Document</button>
+                                </div>
+
+                                <div class="optima-rco-actions">
+                                    <button id="wc-optima-fetch-ro-documents" class="button button-primary">Get Latest RO Documents</button>
+                                </div>
+
+                                <div id="wc-optima-ro-documents-loading" style="display: none;">
+                                    <p><span class="spinner is-active" style="float: none;"></span> Loading RO documents...</p>
+                                </div>
+
+                                <div id="wc-optima-ro-documents-results" style="margin-top: 20px;">
+                                    <!-- Results will be displayed here -->
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
 
                         <div id="wc-optima-ro-documents-loading" style="display: none;">
                             <p><span class="spinner is-active" style="float: none;"></span> Loading RO documents...</p>

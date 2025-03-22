@@ -65,6 +65,78 @@ class WC_Optima_API
     }
 
     /**
+     * Get a specific RO document by ID from Optima API
+     * 
+     * @param string $document_id Document ID
+     * @return array|false Document data if found, false otherwise
+     */
+    public function get_ro_document_by_id($document_id)
+    {
+        $token = $this->get_access_token();
+
+        if (!$token) {
+            error_log('WC Optima Integration: Failed to get access token');
+            return false;
+        }
+
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->get_ro_document_by_id_with_wp_http($token, $document_id);
+            }
+
+            $client = new \GuzzleHttp\Client();
+
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token
+                ]
+            ];
+
+            $response = $client->request('GET', $this->api_url . '/Documents/' . $document_id, $options);
+            $document = json_decode($response->getBody()->getContents(), true);
+
+            return $document;
+        } catch (Exception $e) {
+            error_log('WC Optima Integration: Error getting RO document by ID - ' . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->get_ro_document_by_id_with_wp_http($token, $document_id);
+        }
+
+        return false;
+    }
+
+    /**
+     * Get RO document by ID using WordPress HTTP API as a fallback
+     *
+     * @param string $token The access token
+     * @param string $document_id Document ID
+     * @return array|false Document data if found, false otherwise
+     */
+    private function get_ro_document_by_id_with_wp_http($token, $document_id)
+    {
+        $response = wp_remote_get($this->api_url . '/Documents/' . $document_id, [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token
+            ]
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $document = json_decode($body, true);
+
+        return $document;
+    }
+
+    /**
      * Get access token from Optima API
      * 
      * @return string|false Access token or false on failure

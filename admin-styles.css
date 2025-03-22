@@ -75,3 +75,20 @@
 #wc-optima-ro-documents-results {
   margin-top: 20px;
 }
+
+/* Add to existing CSS */
+.optima-search-document {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+.optima-search-document input {
+  width: 200px;
+}
+
+.optima-search-document label {
+  margin-right: 5px;
+  font-weight: 600;
+}

@@ -298,4 +298,54 @@ jQuery(document).ready(function ($) {
       .text("Showing " + customers.length + " customers")
       .prependTo("#wc-optima-customers-results");
   }
+
+  $("#wc-optima-search-ro-document").on("click", function (e) {
+    e.preventDefault();
+
+    // Get the document ID from the input field
+    var documentId = $("#wc-optima-document-id").val();
+
+    if (!documentId) {
+      alert("Please enter a document ID to search");
+      return;
+    }
+
+    // Show loading indicator
+    $("#wc-optima-ro-documents-loading").show();
+    $("#wc-optima-ro-documents-results").empty();
+
+    // Make AJAX request
+    $.ajax({
+      url: wc_optima_params.ajax_url,
+      type: "POST",
+      data: {
+        action: "wc_optima_search_ro_document",
+        nonce: wc_optima_params.ro_nonce,
+        document_id: documentId,
+      },
+      success: function (response) {
+        // Hide loading indicator
+        $("#wc-optima-ro-documents-loading").hide();
+
+        if (response.success && response.data) {
+          // Create table for RO documents
+          displayRODocuments([response.data]);
+        } else {
+          // Show error message
+          $("#wc-optima-ro-documents-results").html(
+            '<div class="notice notice-error"><p>Error: ' +
+              (response.data || "Document not found") +
+              "</p></div>"
+          );
+        }
+      },
+      error: function (xhr, status, error) {
+        // Hide loading indicator and show error
+        $("#wc-optima-ro-documents-loading").hide();
+        $("#wc-optima-ro-documents-results").html(
+          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+        );
+      },
+    });
+  });
 });
