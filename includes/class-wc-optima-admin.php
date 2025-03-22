@@ -44,6 +44,13 @@ class WC_Optima_Admin
         // Add AJAX handlers for customer operations
         add_action('wp_ajax_wc_optima_fetch_customers', array($this, 'ajax_fetch_customers'));
         add_action('wp_ajax_wc_optima_create_sample_customer', array($this, 'ajax_create_sample_customer'));
+
+        // Add Optima customer ID to user profile
+        add_action('show_user_profile', array($this, 'display_optima_customer_id_field'));
+        add_action('edit_user_profile', array($this, 'display_optima_customer_id_field'));
+
+        // Add Optima customer ID to order view
+        add_action('woocommerce_admin_order_data_after_billing_address', array($this, 'display_optima_customer_id_in_order'));
     }
 
     /**
@@ -126,10 +133,10 @@ class WC_Optima_Admin
         // Create sample customer data
         $customer_data = [
             'code' => 'WC_' . substr(date('Ymd_His'), 0, 15),
-            'name1' => 'Sample Customer',
+            'name1' => 'Test Account',
             'name2' => 'Test Account',
             'name3' => '',
-            'vatNumber' => '5138648517',
+            'vatNumber' => '6616681238',
             'country' => 'Poland',
             'city' => 'Warsaw',
             'street' => 'Sample Street',
@@ -498,6 +505,61 @@ class WC_Optima_Admin
                     </p>
                 <?php endif; ?>
             </div>
+        </div>
+    <?php
+    }
+
+    /**
+     * Display Optima customer ID field in user profile
+     *
+     * @param WP_User $user The user object being edited
+     */
+    public function display_optima_customer_id_field($user)
+    {
+        // Get the Optima customer ID
+        $optima_customer_id = get_user_meta($user->ID, '_optima_customer_id', true);
+
+        // Only display if we have an Optima customer ID
+        if (empty($optima_customer_id)) {
+            return;
+        }
+
+    ?>
+        <h3><?php _e('Optima Integration', 'wc-optima-integration'); ?></h3>
+        <table class="form-table">
+            <tr>
+                <th><label for="optima_customer_id"><?php _e('Optima Customer ID', 'wc-optima-integration'); ?></label></th>
+                <td>
+                    <input type="text" name="optima_customer_id" id="optima_customer_id" value="<?php echo esc_attr($optima_customer_id); ?>" class="regular-text" readonly />
+                    <p class="description"><?php _e('This is the customer ID in the Optima system.', 'wc-optima-integration'); ?></p>
+                </td>
+            </tr>
+        </table>
+    <?php
+    }
+
+    /**
+     * Display Optima customer ID in order view
+     *
+     * @param WC_Order $order The order object
+     */
+    public function display_optima_customer_id_in_order($order)
+    {
+        // Get the Optima customer ID from order meta
+        $optima_customer_id = $order->get_meta('_optima_customer_id', true);
+
+        // Only display if we have an Optima customer ID
+        if (empty($optima_customer_id)) {
+            return;
+        }
+
+    ?>
+        <div class="order_data_column">
+            <h4><?php _e('Optima Integration', 'wc-optima-integration'); ?></h4>
+            <p>
+                <strong><?php _e('Optima Customer ID:', 'wc-optima-integration'); ?></strong>
+                <?php echo esc_html($optima_customer_id); ?>
+            </p>
         </div>
 <?php
     }
