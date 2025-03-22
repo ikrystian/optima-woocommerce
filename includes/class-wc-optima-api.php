@@ -327,9 +327,10 @@ class WC_Optima_API
     /**
      * Get customers from Optima API
      * 
+     * @param int $limit Optional. Maximum number of customers to return. Default 0 (all customers).
      * @return array|false Array of customers or false on failure
      */
-    public function get_optima_customers()
+    public function get_optima_customers($limit = 0)
     {
         $token = $this->get_access_token();
 
@@ -356,11 +357,16 @@ class WC_Optima_API
             $response = $client->request('GET', $this->api_url . '/Customers', $options);
             $customers = json_decode($response->getBody()->getContents(), true);
 
+            // Apply limit if specified
+            if ($limit > 0 && is_array($customers)) {
+                $customers = array_slice($customers, 0, $limit);
+            }
+
             return $customers;
         } catch (Exception $e) {
             error_log('WC Optima Integration: Error getting customers - ' . $e->getMessage());
             // Fall back to WordPress HTTP API
-            return $this->get_customers_with_wp_http($token);
+            return $this->get_customers_with_wp_http($token, $limit);
         }
 
         return false;
@@ -372,7 +378,7 @@ class WC_Optima_API
      * @param string $token The access token
      * @return array|false Array of customers or false on failure
      */
-    private function get_customers_with_wp_http($token)
+    private function get_customers_with_wp_http($token, $limit = 0)
     {
         $response = wp_remote_get($this->api_url . '/Customers', [
             'timeout' => 45,
@@ -390,6 +396,11 @@ class WC_Optima_API
 
         $body = wp_remote_retrieve_body($response);
         $customers = json_decode($body, true);
+
+        // Apply limit if specified
+        if ($limit > 0 && is_array($customers)) {
+            $customers = array_slice($customers, 0, $limit);
+        }
 
         return $customers;
     }

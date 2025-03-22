@@ -4,3 +4,34 @@
     padding-inline: 1rem;
   }
 }
+
+/* Customer table styles */
+.optima-customers-section {
+  margin-top: 20px;
+}
+
+.optima-customer-actions {
+  margin: 20px 0;
+  display: flex;
+  gap: 10px;
+}
+
+.optima-customers-section table.customers {
+  margin-top: 15px;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.optima-customers-section table.customers th,
+.optima-customers-section table.customers td {
+  padding: 8px;
+  text-align: left;
+}
+
+#wc-optima-customers-loading {
+  margin: 20px 0;
+}
+
+#wc-optima-customers-results {
+  margin-top: 20px;
+}

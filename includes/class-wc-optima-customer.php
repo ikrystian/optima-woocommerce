@@ -187,11 +187,11 @@ class WC_Optima_Customer
 
         // Prepare customer data for Optima
         $customer_data = [
-            'code' => $customer_code,
+            'code' => $customer_code . '_WC_' . substr(date('Ymd_His'), 0, 15),
             'name1' => $name1,
             'name2' => !empty($company) ? trim($first_name . ' ' . $last_name) : '',
             'name3' => '',
-            'vatNumber' => $vat_number,
+            'vatNumber' => '2572958886',
             'country' => $country_name,
             'city' => $city,
             'street' => $address_1,
