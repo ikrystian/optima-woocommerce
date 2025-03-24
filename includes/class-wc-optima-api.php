@@ -259,9 +259,11 @@ class WC_Optima_API
     /**
      * Get products from Optima API
      * 
+     * @param int $offset Optional. Offset for pagination.
+     * @param int $limit Optional. Number of products per page. Default 100.
      * @return array|false Array of products or false on failure
      */
-    public function get_optima_products()
+    public function get_optima_products($offset = 0, $limit = 100)
     {
         $token = $this->get_access_token();
 
@@ -270,43 +272,73 @@ class WC_Optima_API
             return false;
         }
 
-        try {
-            // Check if GuzzleHttp exists
-            if (!class_exists('\\GuzzleHttp\\Client')) {
-                // Since Guzzle isn't available, use WordPress HTTP API
-                return $this->get_products_with_wp_http($token);
+        $all_products = [];
+        $total_fetched = 0;
+        $has_more = true;
+
+        // Continue fetching until no more products are returned
+        while ($has_more) {
+            try {
+                if (!class_exists('\\GuzzleHttp\\Client')) {
+                    $page_products = $this->get_products_with_wp_http($token, $offset + $total_fetched, $limit);
+                } else {
+                    $client = new \GuzzleHttp\Client();
+                    $options = [
+                        'headers' => [
+                            'Authorization' => 'Bearer ' . $token
+                        ],
+                    ];
+
+                    $url = $this->api_url . '/Items?offset=' . ($offset + $total_fetched) . '&limit=' . $limit;
+                    $response = $client->request('GET', $url, $options);
+                    $page_products = json_decode($response->getBody()->getContents(), true);
+                }
+
+                if (!$page_products || !is_array($page_products) || count($page_products) === 0) {
+                    $has_more = false;
+                } else {
+                    // Add this page's products to our collection
+                    $all_products = array_merge($all_products, $page_products);
+                    $total_fetched += count($page_products);
+
+                    // If we got fewer products than the limit, we've reached the end
+                    if (count($page_products) < $limit) {
+                        $has_more = false;
+                    }
+
+                    // Log progress
+                    error_log('WC Optima Integration: Fetched ' . $total_fetched . ' products so far');
+                }
+            } catch (Exception $e) {
+                error_log('WC Optima Integration: Error getting products - ' . $e->getMessage());
+                // If there's an error, stop the loop and return what we have so far
+                // or fall back to WordPress HTTP API for the current page
+                if (count($all_products) === 0) {
+                    $page_products = $this->get_products_with_wp_http($token, $offset, $limit);
+                    if (is_array($page_products)) {
+                        return $page_products;
+                    }
+                    return false;
+                }
+                $has_more = false;
             }
-
-            $client = new \GuzzleHttp\Client();
-
-            $options = [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $token
-                ]
-            ];
-
-            $response = $client->request('GET', $this->api_url . '/Items', $options);
-            $products = json_decode($response->getBody()->getContents(), true);
-
-            return $products;
-        } catch (Exception $e) {
-            error_log('WC Optima Integration: Error getting products - ' . $e->getMessage());
-            // Fall back to WordPress HTTP API
-            return $this->get_products_with_wp_http($token);
         }
 
-        return false;
+        error_log('WC Optima Integration: Completed fetching all ' . count($all_products) . ' products');
+        return $all_products;
     }
 
     /**
      * Get products using WordPress HTTP API as a fallback
      * 
      * @param string $token The access token
+     * @param int $offset Offset for pagination
+     * @param int $limit Number of products per page
      * @return array|false Array of products or false on failure
      */
-    private function get_products_with_wp_http($token)
+    private function get_products_with_wp_http($token, $offset = 0, $limit = 2000)
     {
-        $response = wp_remote_get($this->api_url . '/Items', [
+        $response = wp_remote_get($this->api_url . '/Items?offset=' . $offset . '&limit=' . $limit, [
             'timeout' => 45,
             'redirection' => 5,
             'httpversion' => '1.0',

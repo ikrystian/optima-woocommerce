@@ -203,8 +203,9 @@ class WC_Optima_Product_Sync
             return;
         }
 
-        // Get products from Optima API
-        $optima_products = $this->api->get_optima_products();
+        // Get products from Optima API with pagination
+        // Starting with offset 0 and using the default limit of 100
+        $optima_products = $this->api->get_optima_products(0);
 
         if (!$optima_products) {
             error_log('WC Optima Integration: No products retrieved from Optima');
@@ -221,12 +222,46 @@ class WC_Optima_Product_Sync
         // Get existing WooCommerce product IDs
         $existing_products = $this->get_existing_product_skus();
 
+        // Keep track of processed SKUs to avoid duplicates
+        $processed_skus = [];
+        $skipped_products = 0;
+
         // Process each product from Optima
         foreach ($optima_products as $product) {
             // Map Optima fields to WooCommerce fields based on the provided JSON structure
             $sku = isset($product['code']) ? $product['code'] : null;
             $name = isset($product['name']) ? $product['name'] : null;
             $description = isset($product['description']) ? $product['description'] : '';
+
+            // Generate a unique identifier for products without SKU
+            if (empty($sku) && isset($product['id'])) {
+                // Use Optima ID as fallback identifier
+                $sku = 'optima-' . $product['id'];
+                error_log('WC Optima Integration: Using Optima ID as SKU for product: ' . $product['id']);
+            } elseif (empty($sku)) {
+                // Skip products with no SKU and no ID
+                error_log('WC Optima Integration: Skipping product with no identifiers: ' . json_encode($product));
+                $skipped_products++;
+                continue;
+            }
+
+            // Skip products with duplicate SKUs (first occurrence is processed, others skipped)
+            if (in_array($sku, $processed_skus)) {
+                error_log('WC Optima Integration: Skipping product with duplicate SKU: ' . $sku);
+                $skipped_products++;
+                continue;
+            }
+
+            // Apply a filter to allow 3rd party plugins to skip certain products
+            // Return false from this filter to skip the product
+            if (!apply_filters('wc_optima_should_sync_product', true, $product, $sku)) {
+                error_log('WC Optima Integration: Skipping product by filter: ' . $sku);
+                $skipped_products++;
+                continue;
+            }
+
+            // Add this SKU to the processed list
+            $processed_skus[] = $sku;
 
             // Get product category from defaultGroup
             $category_id = 0;
@@ -281,21 +316,24 @@ class WC_Optima_Product_Sync
 
                 if ($wc_product) {
                     // Update basic product data
-                    $wc_product->set_name($name);
-                    $wc_product->set_description($description);
                     $wc_product->set_regular_price($price);
                     $wc_product->set_stock_quantity($stock_quantity);
                     $wc_product->set_manage_stock(true);
                     $wc_product->set_stock_status($stock_quantity > 0 ? 'instock' : 'outofstock');
 
-                    // Set dimensions if available
-                    if ($height > 0) $wc_product->set_height($height);
-                    if ($width > 0) $wc_product->set_width($width);
-                    if ($length > 0) $wc_product->set_length($length);
+                    // Try to update the SKU in case it has changed or there are conflicts
+                    try {
+                        // Only try to update if the current SKU doesn't match
+                        if ($wc_product->get_sku() !== $sku) {
+                            $wc_product->set_sku($sku);
+                        }
+                    } catch (\WC_Data_Exception $e) {
+                        error_log('WC Optima Integration: SKU error for product ' . $name . ' with SKU ' . $sku . ' - ' . $e->getMessage());
 
-                    // Set category if available
-                    if ($category_id > 0) {
-                        $wc_product->set_category_ids([$category_id]);
+                        // Store original SKU as meta for reference if not already stored
+                        if (!$wc_product->get_meta('_optima_original_sku')) {
+                            $wc_product->update_meta_data('_optima_original_sku', $sku);
+                        }
                     }
 
                     // Update meta data
@@ -326,8 +364,21 @@ class WC_Optima_Product_Sync
                     // Set product type (simple by default)
                     wp_set_object_terms($product_id, 'simple', 'product_type');
 
-                    // Set SKU
-                    $wc_product->set_sku($sku);
+                    // Try to set SKU - handle the case where it might be a duplicate
+                    try {
+                        $wc_product->set_sku($sku);
+                    } catch (\WC_Data_Exception $e) {
+                        error_log('WC Optima Integration: SKU error for product ' . $name . ' with SKU ' . $sku . ' - ' . $e->getMessage());
+
+                        // Generate a unique SKU by appending a timestamp
+                        $unique_sku = $sku . '-' . time();
+                        $wc_product->set_sku($unique_sku);
+
+                        // Store original SKU as meta for reference
+                        $wc_product->update_meta_data('_optima_original_sku', $sku);
+
+                        error_log('WC Optima Integration: Generated unique SKU: ' . $unique_sku);
+                    }
 
                     // Set price
                     $wc_product->set_regular_price($price);
@@ -364,7 +415,13 @@ class WC_Optima_Product_Sync
         update_option('wc_optima_last_sync', current_time('mysql'));
         update_option('wc_optima_products_added', $products_added);
         update_option('wc_optima_products_updated', $products_updated);
+        update_option('wc_optima_products_skipped', $skipped_products);
 
-        error_log(sprintf('WC Optima Integration: Sync completed. Added: %d, Updated: %d', $products_added, $products_updated));
+        error_log(sprintf(
+            'WC Optima Integration: Sync completed. Added: %d, Updated: %d, Skipped: %d',
+            $products_added,
+            $products_updated,
+            $skipped_products
+        ));
     }
 }
