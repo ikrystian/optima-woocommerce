@@ -229,9 +229,16 @@ class WC_Optima_Product_Sync
         // Process each product from Optima
         foreach ($optima_products as $product) {
             // Map Optima fields to WooCommerce fields based on the provided JSON structure
-            $sku = isset($product['code']) ? $product['code'] : null;
-            $name = isset($product['name']) ? $product['name'] : null;
+            $sku = isset($product['code']) ? trim($product['code']) : null;
+            $name = isset($product['name']) ? trim($product['name']) : null;
             $description = isset($product['description']) ? $product['description'] : '';
+
+            // Skip products with no name
+            if (empty($name)) {
+                error_log('WC Optima Integration: Skipping product with no name: ' . json_encode($product));
+                $skipped_products++;
+                continue;
+            }
 
             // Generate a unique identifier for products without SKU
             if (empty($sku) && isset($product['id'])) {
@@ -276,6 +283,22 @@ class WC_Optima_Product_Sync
             $stock_quantity = 0;
             if (isset($stock_data[$sku])) {
                 $stock_quantity = $stock_data[$sku]['available']; // Use available quantity (total minus reservations)
+            }
+
+            // Skip products with price 0 or null, or out of stock
+            if ($price === null || $price <= 0 || $stock_quantity <= 0) {
+                $reason = $price === null || $price <= 0 ? 'invalid price' : 'out of stock';
+
+                // If product exists in WooCommerce, remove it
+                if (isset($existing_products[$sku])) {
+                    $product_id = $existing_products[$sku];
+                    wp_delete_post($product_id, true); // true to bypass trash and delete permanently
+                    error_log('WC Optima Integration: Removed product with SKU: ' . $sku . ' (Price: ' . $price . ', Stock: ' . $stock_quantity . ', Reason: ' . $reason . ')');
+                } else {
+                    error_log('WC Optima Integration: Skipping product with SKU: ' . $sku . ' (Price: ' . $price . ', Stock: ' . $stock_quantity . ', Reason: ' . $reason . ')');
+                }
+                $skipped_products++;
+                continue;
             }
 
             // Get dimensions (height, width, length)
