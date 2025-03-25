@@ -1,0 +1,5 @@
+This is a placeholder for the invoice history preview image.
+
+Please replace this file with an actual image file named 'invoice-history-preview.png' that shows a preview of the invoice history interface.
+
+The recommended dimensions are 800x600 pixels.

@@ -43,6 +43,13 @@ class WC_Optima_Integration
      * @var WC_Optima_Customer
      */
     private $customer;
+    
+    /**
+     * Instance of the invoice handler
+     *
+     * @var WC_Optima_Invoice
+     */
+    private $invoice;
 
     /**
      * Plugin options
@@ -97,6 +104,9 @@ class WC_Optima_Integration
 
         // Load Customer class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-customer.php';
+        
+        // Load Invoice class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-invoice.php';
     }
 
     /**
@@ -115,6 +125,9 @@ class WC_Optima_Integration
 
         // Initialize Customer handler
         $this->customer = new WC_Optima_Customer(self::$api);
+
+        // Initialize Invoice handler
+        $this->invoice = new WC_Optima_Invoice(self::$api);
     }
 
     /**
@@ -125,6 +138,17 @@ class WC_Optima_Integration
     public static function get_api_instance()
     {
         return self::$api;
+    }
+    
+    /**
+     * Get invoice instance
+     * 
+     * @return WC_Optima_Invoice|null Invoice instance or null if not initialized
+     */
+    public static function get_invoice_instance()
+    {
+        $instance = new self();
+        return $instance->invoice;
     }
 
     /**

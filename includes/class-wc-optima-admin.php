@@ -47,6 +47,12 @@ class WC_Optima_Admin
 
         // Add AJAX handler for RO documents
         add_action('wp_ajax_wc_optima_fetch_ro_documents', array($this, 'ajax_fetch_ro_documents'));
+        add_action('wp_ajax_wc_optima_search_ro_document', array($this, 'ajax_search_ro_document'));
+
+        // Add AJAX handlers for invoices
+        add_action('wp_ajax_wc_optima_fetch_invoices', array($this, 'ajax_fetch_invoices'));
+        add_action('wp_ajax_wc_optima_search_invoice', array($this, 'ajax_search_invoice'));
+        add_action('wp_ajax_wc_optima_get_invoice_pdf', array($this, 'ajax_get_invoice_pdf'));
 
         // Add Optima customer ID to user profile
         add_action('show_user_profile', array($this, 'display_optima_customer_id_field'));
@@ -54,8 +60,6 @@ class WC_Optima_Admin
 
         // Add Optima customer ID to order view
         add_action('woocommerce_admin_order_data_after_billing_address', array($this, 'display_optima_customer_id_in_order'));
-
-        add_action('wp_ajax_wc_optima_search_ro_document', array($this, 'ajax_search_ro_document'));
     }
 
     /**
@@ -83,7 +87,8 @@ class WC_Optima_Admin
             wp_localize_script('wc-optima-admin-scripts', 'wc_optima_params', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('wc_optima_fetch_customers'),
-                'ro_nonce' => wp_create_nonce('wc_optima_fetch_ro_documents')
+                'ro_nonce' => wp_create_nonce('wc_optima_fetch_ro_documents'),
+                'invoice_nonce' => wp_create_nonce('wc_optima_fetch_invoices')
             ));
         }
     }
@@ -327,6 +332,7 @@ class WC_Optima_Admin
                 <a href="?page=wc-optima-integration&tab=sync" class="nav-tab <?php echo $active_tab === 'sync' ? 'nav-tab-active' : ''; ?>">Synchronization</a>
                 <a href="?page=wc-optima-integration&tab=customers" class="nav-tab <?php echo $active_tab === 'customers' ? 'nav-tab-active' : ''; ?>">Customers</a>
                 <a href="?page=wc-optima-integration&tab=rco" class="nav-tab <?php echo $active_tab === 'rco' ? 'nav-tab-active' : ''; ?>">RCO</a>
+                <a href="?page=wc-optima-integration&tab=invoices" class="nav-tab <?php echo $active_tab === 'invoices' ? 'nav-tab-active' : ''; ?>">Invoices</a>
                 <a href="?page=wc-optima-integration&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">Settings</a>
             </h2>
 
@@ -487,6 +493,83 @@ class WC_Optima_Admin
 
                         <div id="wc-optima-ro-documents-results" style="margin-top: 20px;">
                             <!-- Results will be displayed here -->
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+            <?php elseif ($active_tab === 'invoices'): ?>
+
+                <div class="optima-invoices-section">
+                    <h2>Optima Invoices</h2>
+
+                    <?php if (empty($this->options['api_url']) || empty($this->options['username']) || empty($this->options['password'])): ?>
+                        <div class="notice notice-warning">
+                            <p>Please configure API settings before fetching invoices. Go to the <a href="?page=wc-optima-integration&tab=settings">Settings tab</a>.</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="optima-search-invoice">
+                            <h3>Search Invoices</h3>
+                            <div class="search-form">
+                                <div class="search-field">
+                                    <label for="wc-optima-invoice-number">Invoice Number:</label>
+                                    <input type="text" id="wc-optima-invoice-number" name="invoice_number" placeholder="Enter invoice number">
+                                </div>
+                                <div class="search-field">
+                                    <label for="wc-optima-date-from">Date From:</label>
+                                    <input type="date" id="wc-optima-date-from" name="date_from">
+                                </div>
+                                <div class="search-field">
+                                    <label for="wc-optima-date-to">Date To:</label>
+                                    <input type="date" id="wc-optima-date-to" name="date_to">
+                                </div>
+                                <div class="search-field">
+                                    <label for="wc-optima-customer-id">Customer ID:</label>
+                                    <input type="text" id="wc-optima-customer-id" name="customer_id" placeholder="Enter customer ID">
+                                </div>
+                                <div class="search-actions">
+                                    <button id="wc-optima-search-invoice" class="button">Search Invoices</button>
+                                    <button id="wc-optima-fetch-invoices" class="button button-primary">Get Latest Invoices</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="wc-optima-invoices-loading" style="display: none;">
+                            <p><span class="spinner is-active" style="float: none;"></span> Loading invoices...</p>
+                        </div>
+
+                        <div id="wc-optima-invoices-results" style="margin-top: 20px;">
+                            <!-- Results will be displayed here -->
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+            <?php elseif ($active_tab === 'invoice-history'): ?>
+
+                <div class="optima-invoice-history-section">
+                    <h2>Invoice History</h2>
+
+                    <?php if (empty($this->options['api_url']) || empty($this->options['username']) || empty($this->options['password'])): ?>
+                        <div class="notice notice-warning">
+                            <p>Please configure API settings before using invoice history. Go to the <a href="?page=wc-optima-integration&tab=settings">Settings tab</a>.</p>
+                        </div>
+                    <?php else: ?>
+                        <p>Use the shortcode <code>[optima_invoice_history]</code> on any page to display the invoice history for logged-in customers.</p>
+                        
+                        <h3>Shortcode Usage</h3>
+                        <p>The shortcode will display a form where customers can search for their invoices and download them as PDFs.</p>
+                        
+                        <h3>Requirements</h3>
+                        <ul>
+                            <li>Users must be logged in to view their invoice history.</li>
+                            <li>Users must have an Optima customer ID associated with their account.</li>
+                        </ul>
+                        
+                        <h3>How to Associate Optima Customer IDs with Users</h3>
+                        <p>When a customer places an order, their Optima customer ID is automatically saved to their user account if available. You can also manually set the Optima customer ID in the user's profile page.</p>
+                        
+                        <h3>Preview</h3>
+                        <div class="optima-invoice-history-preview">
+                            <img src="<?php echo plugins_url('assets/images/invoice-history-preview.png', OPTIMA_WC_PLUGIN_FILE); ?>" alt="Invoice History Preview" style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                         </div>
                     <?php endif; ?>
                 </div>
@@ -658,6 +741,109 @@ class WC_Optima_Admin
             </tr>
         </table>
     <?php
+    }
+
+    /**
+     * AJAX handler for fetching invoices
+     */
+    public function ajax_fetch_invoices()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_invoices')) {
+            wp_send_json_error('Invalid security token');
+            return;
+        }
+
+        // Get API instance
+        $api = WC_Optima_Integration::get_api_instance();
+        if (!$api) {
+            wp_send_json_error('API not initialized');
+            return;
+        }
+
+        // Get invoices
+        $invoices = $api->get_optima_invoices();
+
+        if (!$invoices) {
+            wp_send_json_error('Failed to fetch invoices from Optima API');
+            return;
+        }
+
+        // Send success response
+        wp_send_json_success($invoices);
+    }
+
+    /**
+     * AJAX handler for searching invoices
+     */
+    public function ajax_search_invoice()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_invoices')) {
+            wp_send_json_error('Invalid security token');
+            return;
+        }
+
+        // Check if search parameters are provided
+        if (!isset($_POST['search_params']) || empty($_POST['search_params'])) {
+            wp_send_json_error('Search parameters are required');
+            return;
+        }
+
+        $search_params = $_POST['search_params'];
+
+        // Get API instance
+        $api = WC_Optima_Integration::get_api_instance();
+        if (!$api) {
+            wp_send_json_error('API not initialized');
+            return;
+        }
+
+        // Search invoices
+        $invoices = $api->search_optima_invoices($search_params);
+
+        if (!$invoices) {
+            wp_send_json_error('No invoices found matching the search criteria');
+            return;
+        }
+
+        // Send success response
+        wp_send_json_success($invoices);
+    }
+
+    /**
+     * AJAX handler for getting invoice PDF
+     */
+    public function ajax_get_invoice_pdf()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_invoices')) {
+            wp_send_json_error('Invalid security token');
+            return;
+        }
+
+        // Check if invoice ID is provided
+        if (!isset($_POST['invoice_id']) || empty($_POST['invoice_id'])) {
+            wp_send_json_error('Invoice ID is required');
+            return;
+        }
+
+        $invoice_id = intval($_POST['invoice_id']);
+
+        // Get the invoice handler
+        $invoice_handler = WC_Optima_Integration::get_invoice_instance();
+        if (!$invoice_handler) {
+            wp_send_json_error('Invoice handler not initialized');
+            return;
+        }
+
+        // Use the invoice handler's AJAX method to generate the PDF
+        // This will handle getting the invoice data, customer data, and generating the PDF
+        $invoice_handler->ajax_get_invoice_pdf();
+        
+        // The ajax_get_invoice_pdf method in the invoice handler will send the JSON response,
+        // so we don't need to do anything else here
+        exit;
     }
 
     /**

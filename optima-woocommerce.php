@@ -56,7 +56,7 @@ function wc_optima_init()
     require_once plugin_dir_path(__FILE__) . 'includes/class-wc-optima-filters.php';
 
     // Initialize the plugin
-    new WC_Optima_Integration();
+    $integration = new WC_Optima_Integration();
 
     /**
      * Skip products with zero stock and zero price during import

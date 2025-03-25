@@ -348,4 +348,259 @@ jQuery(document).ready(function ($) {
       },
     });
   });
+
+  // Handle the fetch invoices button click
+  $("#wc-optima-fetch-invoices").on("click", function (e) {
+    e.preventDefault();
+
+    // Show loading indicator
+    $("#wc-optima-invoices-loading").show();
+    $("#wc-optima-invoices-results").empty();
+
+    // Make AJAX request
+    $.ajax({
+      url: wc_optima_params.ajax_url,
+      type: "POST",
+      data: {
+        action: "wc_optima_fetch_invoices",
+        nonce: wc_optima_params.invoice_nonce,
+      },
+      success: function (response) {
+        // Hide loading indicator
+        $("#wc-optima-invoices-loading").hide();
+
+        if (response.success && response.data) {
+          // Create table for invoices
+          displayInvoices(response.data);
+        } else {
+          // Show error message
+          $("#wc-optima-invoices-results").html(
+            '<div class="notice notice-error"><p>Error: ' +
+              (response.data || "Failed to fetch invoices") +
+              "</p></div>"
+          );
+        }
+      },
+      error: function (xhr, status, error) {
+        // Hide loading indicator and show error
+        $("#wc-optima-invoices-loading").hide();
+        $("#wc-optima-invoices-results").html(
+          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+        );
+      },
+    });
+  });
+
+  // Handle the search invoice button click
+  $("#wc-optima-search-invoice").on("click", function (e) {
+    e.preventDefault();
+
+    // Get search parameters
+    var invoiceNumber = $("#wc-optima-invoice-number").val();
+    var dateFrom = $("#wc-optima-date-from").val();
+    var dateTo = $("#wc-optima-date-to").val();
+    var customerId = $("#wc-optima-customer-id").val();
+
+    // Check if at least one search parameter is provided
+    if (!invoiceNumber && !dateFrom && !dateTo && !customerId) {
+      alert("Please enter at least one search parameter");
+      return;
+    }
+
+    // Show loading indicator
+    $("#wc-optima-invoices-loading").show();
+    $("#wc-optima-invoices-results").empty();
+
+    // Make AJAX request
+    $.ajax({
+      url: wc_optima_params.ajax_url,
+      type: "POST",
+      data: {
+        action: "wc_optima_search_invoice",
+        nonce: wc_optima_params.invoice_nonce,
+        search_params: {
+          invoice_number: invoiceNumber,
+          date_from: dateFrom,
+          date_to: dateTo,
+          customer_id: customerId,
+        },
+      },
+      success: function (response) {
+        // Hide loading indicator
+        $("#wc-optima-invoices-loading").hide();
+
+        if (response.success && response.data) {
+          // Check if response.data is an array or a single object
+          if (Array.isArray(response.data)) {
+            // It's an array, pass it directly
+            displayInvoices(response.data);
+          } else {
+            // It's a single object, wrap it in an array
+            displayInvoices([response.data]);
+          }
+        } else {
+          // Show error message
+          $("#wc-optima-invoices-results").html(
+            '<div class="notice notice-warning"><p>' +
+              (response.data || "No invoices found matching the search criteria") +
+              "</p></div>"
+          );
+        }
+      },
+      error: function (xhr, status, error) {
+        // Hide loading indicator and show error
+        $("#wc-optima-invoices-loading").hide();
+        $("#wc-optima-invoices-results").html(
+          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+        );
+      },
+    });
+  });
+
+  // Function to display invoices in a table
+  function displayInvoices(invoices) {
+    if (!invoices.length) {
+      $("#wc-optima-invoices-results").html(
+        '<div class="notice notice-warning"><p>No invoices found.</p></div>'
+      );
+      return;
+    }
+
+    // Create table
+    var table = $(
+      '<table class="wp-list-table widefat fixed striped invoices">'
+    );
+
+    // Add table header
+    var thead = $("<thead>").appendTo(table);
+    var headerRow = $("<tr>").appendTo(thead);
+
+    $("<th>").text("ID").appendTo(headerRow);
+    $("<th>").text("Invoice Number").appendTo(headerRow);
+    $("<th>").text("Issue Date").appendTo(headerRow);
+    $("<th>").text("Due Date").appendTo(headerRow);
+    $("<th>").text("Net Value").appendTo(headerRow);
+    $("<th>").text("Gross Value").appendTo(headerRow);
+    $("<th>").text("Currency").appendTo(headerRow);
+    $("<th>").text("Customer ID").appendTo(headerRow);
+    $("<th>").text("Document Type").appendTo(headerRow);
+    $("<th>").text("Actions").appendTo(headerRow);
+
+    // Add table body
+    var tbody = $("<tbody>").appendTo(table);
+
+    // Add rows for each invoice
+    $.each(invoices, function (index, invoice) {
+      var row = $("<tr>").appendTo(tbody);
+
+      $("<td>")
+        .text(invoice.id || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.invoiceNumber || "")
+        .appendTo(row);
+      $("<td>")
+        .text(
+          invoice.issueDate
+            ? new Date(invoice.issueDate).toLocaleDateString()
+            : ""
+        )
+        .appendTo(row);
+      $("<td>")
+        .text(
+          invoice.dueDate
+            ? new Date(invoice.dueDate).toLocaleDateString()
+            : ""
+        )
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.netValue ? parseFloat(invoice.netValue).toFixed(2) : "0.00")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.grossValue ? parseFloat(invoice.grossValue).toFixed(2) : "0.00")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.currency || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.customerId || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.documentTypeName || "")
+        .appendTo(row);
+
+      // Add action buttons
+      var actionsCell = $("<td>").appendTo(row);
+      $("<button>")
+        .addClass("button button-small")
+        .text("Download PDF")
+        .on("click", function () {
+          downloadInvoicePdf(invoice.id);
+        })
+        .appendTo(actionsCell);
+    });
+
+    // Add table to results div
+    $("#wc-optima-invoices-results").html(table);
+
+    // Add count message
+    $("<p>")
+      .text("Showing " + invoices.length + " invoices")
+      .prependTo("#wc-optima-invoices-results");
+  }
+
+  // Function to download invoice PDF
+  function downloadInvoicePdf(invoiceId) {
+    // Show loading indicator
+    $("#wc-optima-invoices-loading").show();
+
+    // Make AJAX request
+    $.ajax({
+      url: wc_optima_params.ajax_url,
+      type: "POST",
+      data: {
+        action: "wc_optima_get_invoice_pdf",
+        nonce: wc_optima_params.invoice_nonce,
+        invoice_id: invoiceId,
+      },
+      success: function (response) {
+        // Hide loading indicator
+        $("#wc-optima-invoices-loading").hide();
+
+        if (response.success && response.data && response.data.pdf_data) {
+          // Create a blob from the base64 data
+          var binary = atob(response.data.pdf_data);
+          var array = [];
+          for (var i = 0; i < binary.length; i++) {
+            array.push(binary.charCodeAt(i));
+          }
+          var blob = new Blob([new Uint8Array(array)], { type: 'application/pdf' });
+          
+          // Create a URL for the blob
+          var url = URL.createObjectURL(blob);
+          
+          // Create a temporary link and trigger download
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = response.data.filename || 'invoice.pdf';
+          document.body.appendChild(a);
+          a.click();
+          
+          // Clean up
+          setTimeout(function() {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
+        } else {
+          // Show error message
+          alert("Error: " + (response.data || "Failed to generate PDF"));
+        }
+      },
+      error: function (xhr, status, error) {
+        // Hide loading indicator and show error
+        $("#wc-optima-invoices-loading").hide();
+        alert("Error: " + error);
+      },
+    });
+  }
 });

@@ -737,4 +737,283 @@ class WC_Optima_API
 
         return $documents;
     }
+
+    /**
+     * Get invoices from Optima API
+     * 
+     * @param array $filters Optional. Filters to apply to the invoice search.
+     * @param int $limit Optional. Maximum number of invoices to return. Default 0 (all invoices).
+     * @return array|false Array of invoices or false on failure
+     */
+    public function get_optima_invoices($filters = array(), $limit = 0)
+    {
+        $token = $this->get_access_token();
+
+        if (!$token) {
+            error_log('WC Optima Integration: Failed to get access token');
+            return false;
+        }
+
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->get_invoices_with_wp_http($token, $filters, $limit);
+            }
+
+            $client = new \GuzzleHttp\Client();
+
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token
+                ]
+            ];
+
+            // Build query string for filters
+            $query_string = '';
+            if (!empty($filters)) {
+                $query_params = array();
+                foreach ($filters as $key => $value) {
+                    $query_params[] = $key . '=' . urlencode($value);
+                }
+                $query_string = '?' . implode('&', $query_params);
+            }
+
+            $response = $client->request('GET', $this->api_url . '/Invoices' . $query_string, $options);
+            $invoices = json_decode($response->getBody()->getContents(), true);
+
+            // Apply limit if specified
+            if ($limit > 0 && is_array($invoices)) {
+                $invoices = array_slice($invoices, 0, $limit);
+            }
+
+            return $invoices;
+        } catch (Exception $e) {
+            error_log('WC Optima Integration: Error getting invoices - ' . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->get_invoices_with_wp_http($token, $filters, $limit);
+        }
+
+        return false;
+    }
+
+    /**
+     * Get invoices using WordPress HTTP API as a fallback
+     * 
+     * @param string $token The access token
+     * @param array $filters Optional. Filters to apply to the invoice search.
+     * @param int $limit Optional. Maximum number of invoices to return. Default 0 (all invoices).
+     * @return array|false Array of invoices or false on failure
+     */
+    private function get_invoices_with_wp_http($token, $filters = array(), $limit = 0)
+    {
+        // Build query string for filters
+        $query_string = '';
+        if (!empty($filters)) {
+            $query_params = array();
+            foreach ($filters as $key => $value) {
+                $query_params[] = $key . '=' . urlencode($value);
+            }
+            $query_string = '?' . implode('&', $query_params);
+        }
+
+        $response = wp_remote_get($this->api_url . '/Invoices' . $query_string, [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token
+            ]
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $invoices = json_decode($body, true);
+
+        // Apply limit if specified
+        if ($limit > 0 && is_array($invoices)) {
+            $invoices = array_slice($invoices, 0, $limit);
+        }
+
+        return $invoices;
+    }
+
+    /**
+     * Get a specific invoice by ID from Optima API
+     * 
+     * @param string $invoice_id Invoice ID
+     * @return array|false Invoice data if found, false otherwise
+     */
+    public function get_optima_invoice_by_id($invoice_id)
+    {
+        $token = $this->get_access_token();
+
+        if (!$token) {
+            error_log('WC Optima Integration: Failed to get access token');
+            return false;
+        }
+
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->get_invoice_by_id_with_wp_http($token, $invoice_id);
+            }
+
+            $client = new \GuzzleHttp\Client();
+
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token
+                ]
+            ];
+
+            $response = $client->request('GET', $this->api_url . '/Invoices/' . $invoice_id, $options);
+            $invoice = json_decode($response->getBody()->getContents(), true);
+
+            return $invoice;
+        } catch (Exception $e) {
+            error_log('WC Optima Integration: Error getting invoice by ID - ' . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->get_invoice_by_id_with_wp_http($token, $invoice_id);
+        }
+
+        return false;
+    }
+
+    /**
+     * Get invoice by ID using WordPress HTTP API as a fallback
+     *
+     * @param string $token The access token
+     * @param string $invoice_id Invoice ID
+     * @return array|false Invoice data if found, false otherwise
+     */
+    private function get_invoice_by_id_with_wp_http($token, $invoice_id)
+    {
+        $response = wp_remote_get($this->api_url . '/Invoices/' . $invoice_id, [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token
+            ]
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $invoice = json_decode($body, true);
+
+        return $invoice;
+    }
+
+    /**
+     * Search for invoices in Optima API based on search parameters
+     * 
+     * @param array $search_params Search parameters
+     * @return array|false Array of invoices or false on failure
+     */
+    public function search_optima_invoices($search_params)
+    {
+        // Convert search parameters to filters
+        $filters = array();
+        
+        if (isset($search_params['invoice_number']) && !empty($search_params['invoice_number'])) {
+            $filters['invoiceNumber'] = $search_params['invoice_number'];
+        }
+        
+        if (isset($search_params['date_from']) && !empty($search_params['date_from'])) {
+            $filters['dateFrom'] = $search_params['date_from'];
+        }
+        
+        if (isset($search_params['date_to']) && !empty($search_params['date_to'])) {
+            $filters['dateTo'] = $search_params['date_to'];
+        }
+        
+        if (isset($search_params['customer_id']) && !empty($search_params['customer_id'])) {
+            $filters['customerId'] = $search_params['customer_id'];
+        }
+
+        // Get invoices with filters
+        return $this->get_optima_invoices($filters);
+    }
+
+    /**
+     * Get a specific customer by ID from Optima API
+     * 
+     * @param string $customer_id Customer ID
+     * @return array|false Customer data if found, false otherwise
+     */
+    public function get_optima_customer_by_id($customer_id)
+    {
+        $token = $this->get_access_token();
+
+        if (!$token) {
+            error_log('WC Optima Integration: Failed to get access token');
+            return false;
+        }
+
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->get_customer_by_id_with_wp_http($token, $customer_id);
+            }
+
+            $client = new \GuzzleHttp\Client();
+
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token
+                ]
+            ];
+
+            $response = $client->request('GET', $this->api_url . '/Customers/' . $customer_id, $options);
+            $customer = json_decode($response->getBody()->getContents(), true);
+
+            return $customer;
+        } catch (Exception $e) {
+            error_log('WC Optima Integration: Error getting customer by ID - ' . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->get_customer_by_id_with_wp_http($token, $customer_id);
+        }
+
+        return false;
+    }
+
+    /**
+     * Get customer by ID using WordPress HTTP API as a fallback
+     *
+     * @param string $token The access token
+     * @param string $customer_id Customer ID
+     * @return array|false Customer data if found, false otherwise
+     */
+    private function get_customer_by_id_with_wp_http($token, $customer_id)
+    {
+        $response = wp_remote_get($this->api_url . '/Customers/' . $customer_id, [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token
+            ]
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $customer = json_decode($body, true);
+
+        return $customer;
+    }
 }
