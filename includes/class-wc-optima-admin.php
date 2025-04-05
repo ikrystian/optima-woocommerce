@@ -402,11 +402,7 @@ class WC_Optima_Admin
             <h1><?php _e('Integracja WooCommerce z Optima', 'optima-woocommerce'); ?></h1>
 
             <h2 class="nav-tab-wrapper">
-                <a href="?page=wc-optima-integration&tab=sync" class="nav-tab <?php echo $active_tab === 'sync' ? 'nav-tab-active' : ''; ?>">Synchronization</a>
-                <a href="?page=wc-optima-integration&tab=customers" class="nav-tab <?php echo $active_tab === 'customers' ? 'nav-tab-active' : ''; ?>">Customers</a>
-                <a href="?page=wc-optima-integration&tab=rco" class="nav-tab <?php echo $active_tab === 'rco' ? 'nav-tab-active' : ''; ?>">RCO</a>
                 <a href="?page=wc-optima-integration&tab=invoices" class="nav-tab <?php echo $active_tab === 'invoices' ? 'nav-tab-active' : ''; ?>">Invoices</a>
-                <a href="?page=wc-optima-integration&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">Settings</a>
                 <a href="?page=wc-optima-integration&tab=sync" class="nav-tab <?php echo $active_tab === 'sync' ? 'nav-tab-active' : ''; ?>"><?php _e('Synchronizacja', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=customers" class="nav-tab <?php echo $active_tab === 'customers' ? 'nav-tab-active' : ''; ?>"><?php _e('Klienci', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=rco" class="nav-tab <?php echo $active_tab === 'rco' ? 'nav-tab-active' : ''; ?>"><?php _e('Dokumenty RO', 'optima-woocommerce'); ?></a>
