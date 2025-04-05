@@ -45,6 +45,13 @@ class WC_Optima_Integration
     private $customer;
 
     /**
+     * Instance of the invoice handler
+     *
+     * @var WC_Optima_Invoice
+     */
+    private $invoice;
+
+    /**
      * Instance of the GUS API handler
      *
      * @var WC_Optima_GUS_API
@@ -140,6 +147,9 @@ class WC_Optima_Integration
         // Load Customer class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-customer.php';
 
+        // Load Invoice class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-invoice.php';
+
         // Load GUS API class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-gus-api.php';
 
@@ -182,6 +192,9 @@ class WC_Optima_Integration
         // Initialize Customer handler
         $this->customer = new WC_Optima_Customer(self::$api);
 
+        // Initialize Invoice handler
+        $this->invoice = new WC_Optima_Invoice(self::$api);
+
         // Initialize AJAX handler
         $this->ajax = new WC_Optima_AJAX($this->gus_api);
 
@@ -204,6 +217,17 @@ class WC_Optima_Integration
     public static function get_api_instance()
     {
         return self::$api;
+    }
+
+    /**
+     * Get invoice instance
+     *
+     * @return WC_Optima_Invoice|null Invoice instance or null if not initialized
+     */
+    public static function get_invoice_instance()
+    {
+        $instance = new self();
+        return $instance->invoice;
     }
 
     /**

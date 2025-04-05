@@ -92,3 +92,78 @@
   margin-right: 5px;
   font-weight: 600;
 }
+
+/* Invoices styles */
+.optima-invoices-section {
+  margin-top: 20px;
+}
+
+.optima-search-invoice {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.optima-search-invoice h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+.search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.search-field {
+  flex: 1 0 200px;
+}
+
+.search-field label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.search-field input {
+  width: 100%;
+  padding: 6px;
+}
+
+.search-actions {
+  flex-basis: 100%;
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.optima-invoices-section table.invoices {
+  margin-top: 15px;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.optima-invoices-section table.invoices th,
+.optima-invoices-section table.invoices td {
+  padding: 8px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Make the table horizontally scrollable */
+.optima-invoices-section #wc-optima-invoices-results {
+  overflow-x: auto;
+}
+
+#wc-optima-invoices-loading {
+  margin: 20px 0;
+}
+
+#wc-optima-invoices-results {
+  margin-top: 20px;
+}
