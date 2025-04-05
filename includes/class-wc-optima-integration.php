@@ -398,8 +398,31 @@ class WC_Optima_Integration
                     $result['fullNumber'] ?? ''
                 )
             );
+        } elseif (is_array($result) && isset($result['error']) && $result['error'] === true) {
+            // Handle specific error response
+            $error_message = isset($result['message']) ? $result['message'] : __('Nieznany błąd', 'optima-woocommerce');
+            $status_code = isset($result['status_code']) ? $result['status_code'] : '';
+
+            // Add a note to the order with detailed error information
+            $order->add_order_note(
+                sprintf(
+                    __('Nie udało się utworzyć dokumentu RO Optima. Błąd %s: %s', 'optima-woocommerce'),
+                    $status_code,
+                    $error_message
+                )
+            );
+
+            // Check if this is a database version error
+            if (strpos($error_message, 'Wersja bazy danych jest starsza') !== false) {
+                // Add a more specific note about database version mismatch
+                $order->add_order_note(
+                    __('Wykryto niezgodność wersji bazy danych Optima. Proszę skontaktować się z administratorem systemu Optima.', 'optima-woocommerce')
+                );
+            }
+
+            error_log(sprintf(__('Integracja WC Optima: Błąd podczas tworzenia dokumentu RO dla zamówienia %s: %s', 'optima-woocommerce'), $order_id, $error_message));
         } else {
-            // Add a note to the order about the failure
+            // Generic failure
             $order->add_order_note(
                 __('Nie udało się utworzyć dokumentu RO Optima.', 'optima-woocommerce')
             );

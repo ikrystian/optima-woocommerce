@@ -2,7 +2,7 @@
 
 /**
  * API handling class for Optima WooCommerce integration
- * 
+ *
  * @package Optima_WooCommerce
  */
 
@@ -66,7 +66,7 @@ class WC_Optima_API
 
     /**
      * Get a specific RO document by ID from Optima API
-     * 
+     *
      * @param string $document_id Document ID
      * @return array|false Document data if found, false otherwise
      */
@@ -138,7 +138,7 @@ class WC_Optima_API
 
     /**
      * Get access token from Optima API
-     * 
+     *
      * @return string|false Access token or false on failure
      */
     public function get_access_token()
@@ -205,7 +205,7 @@ class WC_Optima_API
 
     /**
      * Get token using WordPress HTTP API as a fallback
-     * 
+     *
      * @return string|false Access token or false on failure
      */
     private function get_token_with_wp_http()
@@ -258,7 +258,7 @@ class WC_Optima_API
 
     /**
      * Get products from Optima API
-     * 
+     *
      * @param int $offset Optional. Offset for pagination.
      * @param int $limit Optional. Number of products per page. Default 100.
      * @return array|false Array of products or false on failure
@@ -330,7 +330,7 @@ class WC_Optima_API
 
     /**
      * Get products using WordPress HTTP API as a fallback
-     * 
+     *
      * @param string $token The access token
      * @param int $offset Offset for pagination
      * @param int $limit Number of products per page
@@ -360,7 +360,7 @@ class WC_Optima_API
 
     /**
      * Get product stock quantities from Optima API
-     * 
+     *
      * @return array|false Array of stock data or false on failure
      */
     public function get_optima_stock()
@@ -402,7 +402,7 @@ class WC_Optima_API
 
     /**
      * Get stock using WordPress HTTP API as a fallback
-     * 
+     *
      * @param string $token The access token
      * @return array|false Array of stock data or false on failure
      */
@@ -430,7 +430,7 @@ class WC_Optima_API
 
     /**
      * Get customers from Optima API
-     * 
+     *
      * @param int $limit Optional. Maximum number of customers to return. Default 0 (all customers).
      * @return array|false Array of customers or false on failure
      */
@@ -478,7 +478,7 @@ class WC_Optima_API
 
     /**
      * Get customers using WordPress HTTP API as a fallback
-     * 
+     *
      * @param string $token The access token
      * @param int $limit Optional. Maximum number of customers to return. Default 0 (all customers).
      * @return array|false Array of customers or false on failure
@@ -512,7 +512,7 @@ class WC_Optima_API
 
     /**
      * Create a new customer in Optima
-     * 
+     *
      * @param array $customer_data Customer data in Optima format
      * @return array|false New customer data if created, false on failure
      */
@@ -557,7 +557,7 @@ class WC_Optima_API
 
     /**
      * Create customer using WordPress HTTP API as a fallback
-     * 
+     *
      * @param string $token The access token
      * @param array $customer_data Customer data in Optima format
      * @return array|false New customer data if created, false on failure
@@ -588,9 +588,9 @@ class WC_Optima_API
 
     /**
      * Create RO document in Optima
-     * 
+     *
      * @param array $order_data Order data in Optima format
-     * @return array|false New document data if created, false on failure
+     * @return array|false New document data if created, false or error array on failure
      */
     public function create_ro_document($order_data)
     {
@@ -598,7 +598,10 @@ class WC_Optima_API
 
         if (!$token) {
             error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu do tworzenia dokumentu RO', 'optima-woocommerce'));
-            return false;
+            return [
+                'error' => true,
+                'message' => __('Nie udało się uzyskać tokena dostępu do API Optima', 'optima-woocommerce')
+            ];
         }
 
         try {
@@ -618,28 +621,118 @@ class WC_Optima_API
                 'body' => json_encode($order_data)
             ];
 
-            $response = $client->request('POST', $this->api_url . '/Documents', $options);
-            $result = json_decode($response->getBody()->getContents(), true);
+            // Add retry mechanism for Guzzle requests
+            $max_retries = 3; // Maximum number of retry attempts
+            $retry_delay = 2; // Delay between retries in seconds
+            $retry_count = 0;
 
-            return $result;
+            while ($retry_count <= $max_retries) {
+                try {
+                    $response = $client->request('POST', $this->api_url . '/Documents', $options);
+                    $result = json_decode($response->getBody()->getContents(), true);
+                    return $result;
+                } catch (\GuzzleHttp\Exception\ClientException $e) {
+                    // Handle 4xx errors (client errors)
+                    $response = $e->getResponse();
+                    $status_code = $response->getStatusCode();
+                    $body = $response->getBody()->getContents();
+                    $result = json_decode($body, true);
+
+                    $error_message = '';
+                    // Try to extract error message from response
+                    if (is_array($result) && isset($result['Message'])) {
+                        $error_message = $result['Message'];
+                    } elseif (is_array($result) && isset($result['message'])) {
+                        $error_message = $result['message'];
+                    } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
+                        $error_message = $result['error']['message'];
+                    } elseif (!empty($body)) {
+                        $error_message = $body;
+                    } else {
+                        $error_message = $e->getMessage();
+                    }
+
+                    error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
+
+                    // Client errors (4xx) are usually not worth retrying unless it's a rate limit (429)
+                    if ($status_code == 429 && $retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    return [
+                        'error' => true,
+                        'status_code' => $status_code,
+                        'message' => $error_message,
+                        'retries' => $retry_count
+                    ];
+                } catch (\GuzzleHttp\Exception\ServerException $e) {
+                    // Handle 5xx errors (server errors)
+                    error_log(__('Integracja WC Optima: Błąd serwera podczas tworzenia dokumentu RO - ', 'optima-woocommerce') . $e->getMessage());
+
+                    // Server errors are good candidates for retry
+                    if ($retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    // Fall back to WordPress HTTP API after exhausting retries
+                    return $this->create_ro_with_wp_http($token, $order_data);
+                } catch (\GuzzleHttp\Exception\ConnectException $e) {
+                    // Handle connection errors
+                    error_log(__('Integracja WC Optima: Błąd połączenia podczas tworzenia dokumentu RO - ', 'optima-woocommerce') . $e->getMessage());
+
+                    // Connection errors are good candidates for retry
+                    if ($retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    // Fall back to WordPress HTTP API after exhausting retries
+                    return $this->create_ro_with_wp_http($token, $order_data);
+                }
+            }
         } catch (Exception $e) {
             error_log(__('Integracja WC Optima: Błąd podczas tworzenia dokumentu RO - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->create_ro_with_wp_http($token, $order_data);
         }
-
-        return false;
     }
 
     /**
      * Create RO document using WordPress HTTP API as a fallback
-     * 
+     *
      * @param string $token The access token
      * @param array $order_data Order data
-     * @return array|false New document data if created, false on failure
+     * @param int $retry_count Number of retries attempted (default 0)
+     * @return array|false New document data if created, false or error array on failure
      */
-    private function create_ro_with_wp_http($token, $order_data)
+    private function create_ro_with_wp_http($token, $order_data, $retry_count = 0)
     {
+        $max_retries = 3; // Maximum number of retry attempts
+        $retry_delay = 2; // Delay between retries in seconds
+
         $response = wp_remote_post($this->api_url . '/Documents', [
             'timeout' => 45,
             'redirection' => 5,
@@ -653,18 +746,80 @@ class WC_Optima_API
 
         if (is_wp_error($response)) {
             error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
+
+            // Retry on connection errors if we haven't exceeded max retries
+            if ($retry_count < $max_retries) {
+                error_log(sprintf(
+                    __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                    $retry_count + 1,
+                    $max_retries,
+                    $retry_delay
+                ));
+
+                // Wait before retrying
+                sleep($retry_delay);
+
+                // Retry with incremented retry count
+                return $this->create_ro_with_wp_http($token, $order_data, $retry_count + 1);
+            }
+
             return false;
         }
 
+        $status_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
         $result = json_decode($body, true);
+
+        // Check for error responses (non-2xx status codes)
+        if ($status_code < 200 || $status_code >= 300) {
+            $error_message = '';
+
+            // Try to extract error message from response
+            if (is_array($result) && isset($result['Message'])) {
+                $error_message = $result['Message'];
+            } elseif (is_array($result) && isset($result['message'])) {
+                $error_message = $result['message'];
+            } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
+                $error_message = $result['error']['message'];
+            } elseif (!empty($body)) {
+                $error_message = $body;
+            } else {
+                $error_message = 'Unknown error (Status code: ' . $status_code . ')';
+            }
+
+            error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
+
+            // Retry on server errors (5xx) if we haven't exceeded max retries
+            if ($status_code >= 500 && $retry_count < $max_retries) {
+                error_log(sprintf(
+                    __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                    $retry_count + 1,
+                    $max_retries,
+                    $retry_delay
+                ));
+
+                // Wait before retrying
+                sleep($retry_delay);
+
+                // Retry with incremented retry count
+                return $this->create_ro_with_wp_http($token, $order_data, $retry_count + 1);
+            }
+
+            // Return the error information so it can be used in the order note
+            return [
+                'error' => true,
+                'status_code' => $status_code,
+                'message' => $error_message,
+                'retries' => $retry_count
+            ];
+        }
 
         return $result;
     }
 
     /**
      * Get RO documents from Optima API
-     * 
+     *
      * @return array|false Array of RO documents or false on failure
      */
     public function get_ro_documents()
@@ -740,7 +895,7 @@ class WC_Optima_API
 
     /**
      * Get invoices from Optima API
-     * 
+     *
      * @param array $filters Optional. Filters to apply to the invoice search.
      * @param int $limit Optional. Maximum number of invoices to return. Default 0 (all invoices).
      * @return array|false Array of invoices or false on failure
@@ -799,7 +954,7 @@ class WC_Optima_API
 
     /**
      * Get invoices using WordPress HTTP API as a fallback
-     * 
+     *
      * @param string $token The access token
      * @param array $filters Optional. Filters to apply to the invoice search.
      * @param int $limit Optional. Maximum number of invoices to return. Default 0 (all invoices).
@@ -844,7 +999,7 @@ class WC_Optima_API
 
     /**
      * Get a specific invoice by ID from Optima API
-     * 
+     *
      * @param string $invoice_id Invoice ID
      * @return array|false Invoice data if found, false otherwise
      */
@@ -916,7 +1071,7 @@ class WC_Optima_API
 
     /**
      * Search for invoices in Optima API based on search parameters
-     * 
+     *
      * @param array $search_params Search parameters
      * @return array|false Array of invoices or false on failure
      */
@@ -924,19 +1079,19 @@ class WC_Optima_API
     {
         // Convert search parameters to filters
         $filters = array();
-        
+
         if (isset($search_params['invoice_number']) && !empty($search_params['invoice_number'])) {
             $filters['invoiceNumber'] = $search_params['invoice_number'];
         }
-        
+
         if (isset($search_params['date_from']) && !empty($search_params['date_from'])) {
             $filters['dateFrom'] = $search_params['date_from'];
         }
-        
+
         if (isset($search_params['date_to']) && !empty($search_params['date_to'])) {
             $filters['dateTo'] = $search_params['date_to'];
         }
-        
+
         if (isset($search_params['customer_id']) && !empty($search_params['customer_id'])) {
             $filters['customerId'] = $search_params['customer_id'];
         }
@@ -947,7 +1102,7 @@ class WC_Optima_API
 
     /**
      * Get a specific customer by ID from Optima API
-     * 
+     *
      * @param string $customer_id Customer ID
      * @return array|false Customer data if found, false otherwise
      */
