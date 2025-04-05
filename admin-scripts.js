@@ -25,8 +25,10 @@ jQuery(document).ready(function ($) {
         } else {
           // Show error message
           $("#wc-optima-ro-documents-results").html(
-            '<div class="notice notice-error"><p>Error: ' +
-              (response.data || "Failed to fetch RO documents") +
+            '<div class="notice notice-error"><p>' +
+              wc_optima_params.error_prefix +
+              " " +
+              (response.data || wc_optima_params.error_fetching_documents) +
               "</p></div>"
           );
         }
@@ -35,7 +37,11 @@ jQuery(document).ready(function ($) {
         // Hide loading indicator and show error
         $("#wc-optima-ro-documents-loading").hide();
         $("#wc-optima-ro-documents-results").html(
-          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+          '<div class="notice notice-error"><p>' +
+            wc_optima_params.error_prefix +
+            " " +
+            (error || wc_optima_params.generic_error) +
+            "</p></div>"
         );
       },
     });
@@ -45,7 +51,9 @@ jQuery(document).ready(function ($) {
   function displayRODocuments(documents) {
     if (!documents.length) {
       $("#wc-optima-ro-documents-results").html(
-        '<div class="notice notice-warning"><p>No RO documents found.</p></div>'
+        '<div class="notice notice-warning"><p>' +
+          wc_optima_params.no_documents_found +
+          "</p></div>"
       );
       return;
     }
@@ -59,20 +67,20 @@ jQuery(document).ready(function ($) {
     var thead = $("<thead>").appendTo(table);
     var headerRow = $("<tr>").appendTo(thead);
 
-    $("<th>").text("ID").appendTo(headerRow);
-    $("<th>").text("Type").appendTo(headerRow);
-    $("<th>").text("Number").appendTo(headerRow);
-    $("<th>").text("Foreign Number").appendTo(headerRow);
-    $("<th>").text("Payment Method").appendTo(headerRow);
-    $("<th>").text("Currency").appendTo(headerRow);
-    $("<th>").text("Status").appendTo(headerRow);
-    $("<th>").text("Sale Date").appendTo(headerRow);
-    $("<th>").text("Amount To Pay").appendTo(headerRow);
-    $("<th>").text("Category").appendTo(headerRow);
-    $("<th>").text("Payer").appendTo(headerRow);
-    $("<th>").text("Recipient").appendTo(headerRow);
-    $("<th>").text("Elements").appendTo(headerRow);
-    $("<th>").text("documentReservationDate").appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_id).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_type).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_number).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_foreign_number).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_payment_method).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_currency).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_status).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_sale_date).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_amount_to_pay).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_category).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_payer).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_recipient).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_elements).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_reservation_date).appendTo(headerRow);
 
     // Add table body
     var tbody = $("<tbody>").appendTo(table);
@@ -127,7 +135,9 @@ jQuery(document).ready(function ($) {
         .appendTo(row);
       $("<td>")
         .text(
-          document.elements ? document.elements.length + " items" : "0 items"
+          document.elements
+            ? document.elements.length + " " + wc_optima_params.items_suffix
+            : "0 " + wc_optima_params.items_suffix
         )
         .appendTo(row);
       $("<td>")
@@ -144,7 +154,7 @@ jQuery(document).ready(function ($) {
 
     // Add count message
     $("<p>")
-      .text("Showing " + documents.length + " RO documents")
+      .text(wc_optima_params.showing_documents.replace("%d", documents.length))
       .prependTo("#wc-optima-ro-documents-results");
   }
 
@@ -171,7 +181,9 @@ jQuery(document).ready(function ($) {
         if (response.success && response.data) {
           // Show success message
           $("#wc-optima-customers-results").html(
-            '<div class="notice notice-success"><p>Sample customer created successfully!</p></div>'
+            '<div class="notice notice-success"><p>' +
+              wc_optima_params.customer_created_success +
+              "</p></div>"
           );
 
           // Display the new customer
@@ -180,8 +192,10 @@ jQuery(document).ready(function ($) {
         } else {
           // Show error message
           $("#wc-optima-customers-results").html(
-            '<div class="notice notice-error"><p>Error: ' +
-              (response.data || "Failed to create sample customer") +
+            '<div class="notice notice-error"><p>' +
+              wc_optima_params.error_prefix +
+              " " +
+              (response.data || wc_optima_params.error_creating_customer) +
               "</p></div>"
           );
         }
@@ -190,7 +204,11 @@ jQuery(document).ready(function ($) {
         // Hide loading indicator and show error
         $("#wc-optima-customers-loading").hide();
         $("#wc-optima-customers-results").html(
-          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+          '<div class="notice notice-error"><p>' +
+            wc_optima_params.error_prefix +
+            " " +
+            (error || wc_optima_params.generic_error) +
+            "</p></div>"
         );
       },
     });
@@ -222,8 +240,10 @@ jQuery(document).ready(function ($) {
         } else {
           // Show error message
           $("#wc-optima-customers-results").html(
-            '<div class="notice notice-error"><p>Error: ' +
-              (response.data || "Failed to fetch customers") +
+            '<div class="notice notice-error"><p>' +
+              wc_optima_params.error_prefix +
+              " " +
+              (response.data || wc_optima_params.error_fetching_customers) +
               "</p></div>"
           );
         }
@@ -232,7 +252,11 @@ jQuery(document).ready(function ($) {
         // Hide loading indicator and show error
         $("#wc-optima-customers-loading").hide();
         $("#wc-optima-customers-results").html(
-          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+          '<div class="notice notice-error"><p>' +
+            wc_optima_params.error_prefix +
+            " " +
+            (error || wc_optima_params.generic_error) +
+            "</p></div>"
         );
       },
     });
@@ -242,7 +266,9 @@ jQuery(document).ready(function ($) {
   function displayCustomers(customers) {
     if (!customers.length) {
       $("#wc-optima-customers-results").html(
-        '<div class="notice notice-warning"><p>No customers found.</p></div>'
+        '<div class="notice notice-warning"><p>' +
+          wc_optima_params.no_customers_found +
+          "</p></div>"
       );
       return;
     }
@@ -256,12 +282,12 @@ jQuery(document).ready(function ($) {
     var thead = $("<thead>").appendTo(table);
     var headerRow = $("<tr>").appendTo(thead);
 
-    $("<th>").text("ID").appendTo(headerRow);
-    $("<th>").text("Code").appendTo(headerRow);
-    $("<th>").text("Name").appendTo(headerRow);
-    $("<th>").text("Email").appendTo(headerRow);
-    $("<th>").text("Phone").appendTo(headerRow);
-    $("<th>").text("City").appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_id).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_code).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_name).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_email).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_phone).appendTo(headerRow);
+    $("<th>").text(wc_optima_params.th_city).appendTo(headerRow);
 
     // Add table body
     var tbody = $("<tbody>").appendTo(table);
@@ -295,7 +321,7 @@ jQuery(document).ready(function ($) {
 
     // Add count message
     $("<p>")
-      .text("Showing " + customers.length + " customers")
+      .text(wc_optima_params.showing_customers.replace("%d", customers.length))
       .prependTo("#wc-optima-customers-results");
   }
 
@@ -306,7 +332,7 @@ jQuery(document).ready(function ($) {
     var documentId = $("#wc-optima-document-id").val();
 
     if (!documentId) {
-      alert("Please enter a document ID to search");
+      alert(wc_optima_params.enter_doc_id_alert);
       return;
     }
 
@@ -320,7 +346,7 @@ jQuery(document).ready(function ($) {
       type: "POST",
       data: {
         action: "wc_optima_search_ro_document",
-        nonce: wc_optima_params.ro_nonce,
+        nonce: wc_optima_params.search_nonce, // Use correct nonce for search
         document_id: documentId,
       },
       success: function (response) {
@@ -333,8 +359,10 @@ jQuery(document).ready(function ($) {
         } else {
           // Show error message
           $("#wc-optima-ro-documents-results").html(
-            '<div class="notice notice-error"><p>Error: ' +
-              (response.data || "Document not found") +
+            '<div class="notice notice-error"><p>' +
+              wc_optima_params.error_prefix +
+              " " +
+              (response.data || wc_optima_params.document_not_found) +
               "</p></div>"
           );
         }
@@ -343,7 +371,11 @@ jQuery(document).ready(function ($) {
         // Hide loading indicator and show error
         $("#wc-optima-ro-documents-loading").hide();
         $("#wc-optima-ro-documents-results").html(
-          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+          '<div class="notice notice-error"><p>' +
+            wc_optima_params.error_prefix +
+            " " +
+            (error || wc_optima_params.generic_error) +
+            "</p></div>"
         );
       },
     });

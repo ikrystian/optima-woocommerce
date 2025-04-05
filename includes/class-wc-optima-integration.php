@@ -2,7 +2,7 @@
 
 /**
  * Main WC_Optima_Integration class
- * 
+ *
  * @package Optima_WooCommerce
  */
 
@@ -43,6 +43,48 @@ class WC_Optima_Integration
      * @var WC_Optima_Customer
      */
     private $customer;
+
+    /**
+     * Instance of the GUS API handler
+     *
+     * @var WC_Optima_GUS_API
+     */
+    private $gus_api;
+
+    /**
+     * Instance of the AJAX handler
+     *
+     * @var WC_Optima_AJAX
+     */
+    private $ajax;
+
+    /**
+     * Instance of the B2C registration handler
+     *
+     * @var WC_Optima_B2C_Registration
+     */
+    private $b2c_registration;
+
+    /**
+     * Instance of the B2B registration handler
+     *
+     * @var WC_Optima_B2B_Registration
+     */
+    private $b2b_registration;
+
+    /**
+     * Instance of the company updater
+     *
+     * @var WC_Optima_Company_Updater
+     */
+    private $company_updater;
+
+    /**
+     * Instance of the account handler
+     *
+     * @var WC_Optima_Account
+     */
+    private $account;
 
     /**
      * Plugin options
@@ -97,6 +139,27 @@ class WC_Optima_Integration
 
         // Load Customer class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-customer.php';
+
+        // Load GUS API class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-gus-api.php';
+
+        // Load AJAX class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-ajax.php';
+
+        // Load Registration base class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-registration.php';
+
+        // Load B2C Registration class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-b2c-registration.php';
+
+        // Load B2B Registration class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-b2b-registration.php';
+
+        // Load Company Updater class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-company-updater.php';
+
+        // Load Account class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-account.php';
     }
 
     /**
@@ -107,6 +170,9 @@ class WC_Optima_Integration
         // Initialize API handler
         self::$api = new WC_Optima_API($this->options);
 
+        // Initialize GUS API handler
+        $this->gus_api = new WC_Optima_GUS_API($this->options);
+
         // Initialize Admin handler
         $this->admin = new WC_Optima_Admin($this->options);
 
@@ -115,16 +181,53 @@ class WC_Optima_Integration
 
         // Initialize Customer handler
         $this->customer = new WC_Optima_Customer(self::$api);
+
+        // Initialize AJAX handler
+        $this->ajax = new WC_Optima_AJAX($this->gus_api);
+
+        // Initialize Registration handlers
+        $this->b2c_registration = new WC_Optima_B2C_Registration($this->options, $this->gus_api);
+        $this->b2b_registration = new WC_Optima_B2B_Registration($this->options, $this->gus_api);
+
+        // Initialize Company Updater
+        $this->company_updater = new WC_Optima_Company_Updater($this->options, $this->gus_api);
+
+        // Initialize Account handler
+        $this->account = new WC_Optima_Account($this->options);
     }
 
     /**
      * Get API instance
-     * 
+     *
      * @return WC_Optima_API|null API instance or null if not initialized
      */
     public static function get_api_instance()
     {
         return self::$api;
+    }
+
+    /**
+     * Get AJAX instance
+     *
+     * @return WC_Optima_AJAX|null AJAX instance or null if not initialized
+     */
+    public function get_ajax_instance()
+    {
+        return $this->ajax;
+    }
+
+    /**
+     * Magic getter for accessing protected properties
+     *
+     * @param string $name Property name
+     * @return mixed Property value or null if not found
+     */
+    public function __get($name)
+    {
+        if (property_exists($this, $name)) {
+            return $this->$name;
+        }
+        return null;
     }
 
     /**
@@ -151,7 +254,7 @@ class WC_Optima_Integration
         wp_schedule_event($target_time, 'daily_at_0430', 'wc_optima_daily_sync');
 
         // Log for debugging
-        error_log(message: 'WC Optima Integration: Plugin activated, scheduled event at ' . date('Y-m-d H:i:s', $target_time));
+        error_log(sprintf(__('Integracja WC Optima: Plugin aktywowany, zaplanowano zdarzenie na %s', 'optima-woocommerce'), date('Y-m-d H:i:s', $target_time)));
     }
 
     /**
@@ -175,7 +278,7 @@ class WC_Optima_Integration
         $order = wc_get_order($order_id);
 
         if (!$order) {
-            error_log('WC Optima Integration: Order not found - ' . $order_id);
+            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono zamówienia - %s', 'optima-woocommerce'), $order_id));
             return;
         }
 
@@ -183,7 +286,7 @@ class WC_Optima_Integration
         $ro_document_id = get_post_meta($order_id, 'optima_ro_document_id', true);
 
         if (!empty($ro_document_id)) {
-            error_log(message: 'WC Optima Integration: RO document already exists for order ' . $order_id);
+            error_log(sprintf(__('Integracja WC Optima: Dokument RO już istnieje dla zamówienia %s', 'optima-woocommerce'), $order_id));
             return;
         }
 
@@ -195,7 +298,7 @@ class WC_Optima_Integration
             'paymentMethod' => 'przelew', // Fixed payment method that is known to work with Optima
             'currency' => $order->get_currency(),
             'elements' => [],
-            'description' => 'Order #' . $order->get_order_number() . ' from WooCommerce',
+            'description' => sprintf(__('Zamówienie #%s z WooCommerce', 'optima-woocommerce'), $order->get_order_number()),
             'status' => 1,
             'sourceWarehouseId' => 1, // Default warehouse ID
             'documentSaleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
@@ -252,7 +355,7 @@ class WC_Optima_Integration
         }
 
         if (empty($order_data['elements'])) {
-            error_log('WC Optima Integration: No products with Optima ID found in order ' . $order_id);
+            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono produktów z ID Optima w zamówieniu %s', 'optima-woocommerce'), $order_id));
             return;
         }
 
@@ -266,7 +369,7 @@ class WC_Optima_Integration
             // Add a note to the order
             $order->add_order_note(
                 sprintf(
-                    __('Optima RO document created: %s (%s)', 'optima-woocommerce'),
+                    __('Utworzono dokument RO Optima: %s (%s)', 'optima-woocommerce'),
                     $result['id'],
                     $result['fullNumber'] ?? ''
                 )
@@ -274,9 +377,9 @@ class WC_Optima_Integration
         } else {
             // Add a note to the order about the failure
             $order->add_order_note(
-                __('Failed to create Optima RO document.', 'optima-woocommerce')
+                __('Nie udało się utworzyć dokumentu RO Optima.', 'optima-woocommerce')
             );
-            error_log(message: 'WC Optima Integration: Failed to create RO document for order ' . $order_id);
+            error_log(sprintf(__('Integracja WC Optima: Nie udało się utworzyć dokumentu RO dla zamówienia %s', 'optima-woocommerce'), $order_id));
         }
     }
 }

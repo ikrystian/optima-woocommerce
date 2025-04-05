@@ -95,7 +95,7 @@ class WC_Optima_Customer
             if ($new_customer && isset($new_customer['id'])) {
                 $optima_customer_id = $new_customer['id'];
             } else {
-                error_log('WC Optima Integration: Failed to create customer in Optima');
+                error_log(__('Integracja WC Optima: Nie udało się utworzyć klienta w Optima', 'optima-woocommerce'));
                 return;
             }
         }
@@ -109,7 +109,7 @@ class WC_Optima_Customer
             update_user_meta($customer_id, '_optima_customer_id', $optima_customer_id);
         }
 
-        error_log(sprintf('WC Optima Integration: Customer ID %s assigned to order %s', $optima_customer_id, $order_id));
+        error_log(sprintf(__('Integracja WC Optima: ID Klienta %s przypisane do zamówienia %s', 'optima-woocommerce'), $optima_customer_id, $order_id));
     }
 
     /**
@@ -209,7 +209,7 @@ class WC_Optima_Customer
             'paymentMethod' => 'gotówka',
             'dateOfPayment' => 0,
             'maxPaymentDelay' => 0,
-            'description' => 'Customer created from WooCommerce ',
+            'description' => __('Klient utworzony z WooCommerce', 'optima-woocommerce'),
             'countryCode' => 'PL'
         ];
 

@@ -75,7 +75,7 @@ class WC_Optima_API
         $token = $this->get_access_token();
 
         if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token');
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu', 'optima-woocommerce'));
             return false;
         }
 
@@ -99,7 +99,7 @@ class WC_Optima_API
 
             return $document;
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error getting RO document by ID - ' . $e->getMessage());
+            error_log(__('Integracja WC Optima: Błąd podczas pobierania dokumentu RO wg ID - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->get_ro_document_by_id_with_wp_http($token, $document_id);
         }
@@ -126,7 +126,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 
@@ -145,7 +145,7 @@ class WC_Optima_API
     {
         // Check if credentials are set
         if (empty($this->api_url) || empty($this->username) || empty($this->password)) {
-            error_log('WC Optima Integration: API credentials not configured.');
+            error_log(__('Integracja WC Optima: Dane uwierzytelniające API nie zostały skonfigurowane.', 'optima-woocommerce'));
             return false;
         }
 
@@ -195,7 +195,7 @@ class WC_Optima_API
                 return $this->access_token;
             }
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error getting access token - ' . $e->getMessage());
+            error_log(__('Integracja WC Optima: Błąd podczas uzyskiwania tokena dostępu - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API if Guzzle fails
             return $this->get_token_with_wp_http();
         }
@@ -212,7 +212,7 @@ class WC_Optima_API
     {
         // Check if credentials are set
         if (empty($this->api_url) || empty($this->username) || empty($this->password)) {
-            error_log('WC Optima Integration: API credentials not configured.');
+            error_log(__('Integracja WC Optima: Dane uwierzytelniające API nie zostały skonfigurowane.', 'optima-woocommerce'));
             return false;
         }
 
@@ -232,7 +232,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 
@@ -268,7 +268,7 @@ class WC_Optima_API
         $token = $this->get_access_token();
 
         if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token');
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu', 'optima-woocommerce'));
             return false;
         }
 
@@ -307,10 +307,10 @@ class WC_Optima_API
                     }
 
                     // Log progress
-                    error_log('WC Optima Integration: Fetched ' . $total_fetched . ' products so far');
+                    error_log(sprintf(__('Integracja WC Optima: Pobranych %d produktów do tej pory', 'optima-woocommerce'), $total_fetched));
                 }
             } catch (Exception $e) {
-                error_log('WC Optima Integration: Error getting products - ' . $e->getMessage());
+                error_log(__('Integracja WC Optima: Błąd podczas pobierania produktów - ', 'optima-woocommerce') . $e->getMessage());
                 // If there's an error, stop the loop and return what we have so far
                 // or fall back to WordPress HTTP API for the current page
                 if (count($all_products) === 0) {
@@ -324,7 +324,7 @@ class WC_Optima_API
             }
         }
 
-        error_log('WC Optima Integration: Completed fetching all ' . count($all_products) . ' products');
+        error_log(sprintf(__('Integracja WC Optima: Zakończono pobieranie wszystkich %d produktów', 'optima-woocommerce'), count($all_products)));
         return $all_products;
     }
 
@@ -348,7 +348,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 
@@ -368,7 +368,7 @@ class WC_Optima_API
         $token = $this->get_access_token();
 
         if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token');
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu', 'optima-woocommerce'));
             return false;
         }
 
@@ -392,7 +392,7 @@ class WC_Optima_API
 
             return $stocks;
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error getting stock quantities - ' . $e->getMessage());
+            error_log(__('Integracja WC Optima: Błąd podczas pobierania stanów magazynowych - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->get_stock_with_wp_http($token);
         }
@@ -418,7 +418,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 
@@ -439,7 +439,7 @@ class WC_Optima_API
         $token = $this->get_access_token();
 
         if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token');
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu', 'optima-woocommerce'));
             return false;
         }
 
@@ -468,7 +468,7 @@ class WC_Optima_API
 
             return $customers;
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error getting customers - ' . $e->getMessage());
+            error_log(__('Integracja WC Optima: Błąd podczas pobierania klientów - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->get_customers_with_wp_http($token, $limit);
         }
@@ -495,7 +495,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 
@@ -521,7 +521,7 @@ class WC_Optima_API
         $token = $this->get_access_token();
 
         if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token');
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu', 'optima-woocommerce'));
             return false;
         }
 
@@ -547,7 +547,7 @@ class WC_Optima_API
 
             return $result;
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error creating customer - ' . $e->getMessage());
+            error_log(__('Integracja WC Optima: Błąd podczas tworzenia klienta - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->create_customer_with_wp_http($token, $customer_data);
         }
@@ -576,7 +576,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 
@@ -597,7 +597,7 @@ class WC_Optima_API
         $token = $this->get_access_token();
 
         if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token for RO document creation');
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu do tworzenia dokumentu RO', 'optima-woocommerce'));
             return false;
         }
 
@@ -623,7 +623,7 @@ class WC_Optima_API
 
             return $result;
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error creating RO document - ' . $e->getMessage());
+            error_log(__('Integracja WC Optima: Błąd podczas tworzenia dokumentu RO - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->create_ro_with_wp_http($token, $order_data);
         }
@@ -652,7 +652,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 
@@ -672,7 +672,7 @@ class WC_Optima_API
         $token = $this->get_access_token();
 
         if (!$token) {
-            error_log('WC Optima Integration: Failed to get access token');
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu', 'optima-woocommerce'));
             return false;
         }
 
@@ -696,7 +696,7 @@ class WC_Optima_API
 
             return $documents;
         } catch (Exception $e) {
-            error_log('WC Optima Integration: Error getting RO documents - ' . $e->getMessage());
+            error_log(__('Integracja WC Optima: Błąd podczas pobierania dokumentów RO - ', 'optima-woocommerce') . $e->getMessage());
             // Fall back to WordPress HTTP API
             return $this->get_ro_documents_with_wp_http($token);
         }
@@ -723,7 +723,7 @@ class WC_Optima_API
         ]);
 
         if (is_wp_error($response)) {
-            error_log('WC Optima Integration WP HTTP Error: ' . $response->get_error_message());
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
             return false;
         }
 

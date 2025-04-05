@@ -1,11 +1,13 @@
 <?php
 
 /**
- * Plugin Name: Intergacja Optimy z WooCommerce
- * Description: Synchronizes products and inventory between Optima API and WooCommerce
+ * Plugin Name: Integracja Optimy z WooCommerce
+ * Description: Synchronizuje produkty i stany magazynowe między API Optima a WooCommerce.
  * Version: 1.0
  * Author: Krystian Kuźmiński
  * Author URI: https://bpcoders.pl
+ * Text Domain: optima-woocommerce
+ * Domain Path: /languages
  */
 
 // Prevent direct access to the file
@@ -20,9 +22,14 @@ define('OPTIMA_WC_PLUGIN_FILE', __FILE__);
 add_filter('cron_schedules', function ($schedules) {
     $schedules['daily_at_0430'] = array(
         'interval' => 86400, // 24 hours in seconds
-        'display' => __('Once daily at 04:30 (4:30 AM)')
+        'display' => __('Codziennie o 04:30', 'optima-woocommerce')
     );
     return $schedules;
+});
+
+// Load plugin text domain for translations
+add_action('plugins_loaded', function () {
+    load_plugin_textdomain('optima-woocommerce', false, dirname(plugin_basename(__FILE__)) . '/languages/');
 });
 
 // Include Guzzle HTTP client via Composer autoloader if available
@@ -32,7 +39,7 @@ if (file_exists(plugin_dir_path(__FILE__) . 'vendor/autoload.php')) {
     // If Composer is not available, we'll need to handle Guzzle differently
     // Let's provide an admin notice
     add_action('admin_notices', function () {
-        echo '<div class="error"><p>WooCommerce Optima Integration requires the Guzzle HTTP library. Please install it using Composer or contact your developer.</p></div>';
+        echo '<div class="error"><p>' . __('Integracja WooCommerce Optima wymaga biblioteki Guzzle HTTP. Proszę zainstalować ją za pomocą Composer lub skontaktować się z deweloperem.', 'optima-woocommerce') . '</p></div>';
     });
 }
 
@@ -56,11 +63,30 @@ function wc_optima_init()
     require_once plugin_dir_path(__FILE__) . 'includes/class-wc-optima-filters.php';
 
     // Initialize the plugin
-    new WC_Optima_Integration();
+    $integration = new WC_Optima_Integration();
+
+    // Register AJAX handlers for company verification
+    add_action('wp_ajax_wc_optima_verify_company', 'wc_optima_verify_company_callback');
+    add_action('wp_ajax_nopriv_wc_optima_verify_company', 'wc_optima_verify_company_callback');
+
+    /**
+     * AJAX callback for company verification
+     */
+    function wc_optima_verify_company_callback()
+    {
+        global $integration;
+
+        if (isset($integration) && isset($integration->ajax)) {
+            $integration->ajax->verify_company();
+        } else {
+            wp_send_json_error(__('Integracja nie została zainicjowana', 'optima-woocommerce'));
+        }
+        exit;
+    }
 
     /**
      * Skip products with zero stock and zero price during import
-     * 
+     *
      * @param bool $should_sync Whether the product should be synchronized
      * @param array $product The product data from Optima API
      * @param string $sku The product SKU
