@@ -125,6 +125,21 @@ class WC_Optima_Integration
         // Add hook for customer creation in Optima
         add_action('woocommerce_checkout_order_processed', array($this->customer, 'process_customer_for_optima'), 10, 3);
 
+        // Ensure order status is set to "pending" after checkout
+        add_action('woocommerce_checkout_order_processed', function ($order_id, $posted_data, $order) {
+            if ($order->get_status() !== 'pending') {
+                $order->update_status('pending', __('Status ustawiony na "oczekuje na oplacenie" przez integrację Optima', 'optima-woocommerce'));
+            }
+        }, 20, 3);
+
+        // Ensure order status is set to "processing" after payment
+        add_action('woocommerce_payment_complete', function ($order_id) {
+            $order = wc_get_order($order_id);
+            if ($order && $order->get_status() !== 'processing') {
+                $order->update_status('processing', __('Status ustawiony na "w trakcie realizacji" przez integrację Optima', 'optima-woocommerce'));
+            }
+        }, 20, 1);
+
         // Add hooks for RO document creation
         add_action('woocommerce_payment_complete', array($this, 'create_ro_document_for_order'), 10, 1);
         add_action('woocommerce_order_status_processing', array($this, 'create_ro_document_for_order'), 10, 1);
@@ -315,6 +330,51 @@ class WC_Optima_Integration
         }
 
         // Prepare order data for Optima
+        // Extract billing data
+        $first_name = $order->get_billing_first_name();
+        $last_name = $order->get_billing_last_name();
+        $company = $order->get_billing_company();
+        $vat_number = $order->get_meta('_billing_vat', true);
+        $country = $order->get_billing_country();
+        $city = $order->get_billing_city();
+        $address_1 = $order->get_billing_address_1();
+        $address_2 = $order->get_billing_address_2();
+        $postcode = $order->get_billing_postcode();
+        $phone = $order->get_billing_phone();
+        $email = $order->get_billing_email();
+
+        // Determine if company or private person
+        $is_company = !empty($company) && !empty($vat_number);
+
+        // Build payer/recipient arrays
+        if ($is_company) {
+            $payer_recipient = [
+                'name' => $company,
+                'vatNumber' => $vat_number,
+                'country' => $country,
+                'city' => $city,
+                'street' => $address_1,
+                'additionalAddress' => $address_2,
+                'postCode' => $postcode,
+                'phone' => $phone,
+                'email' => $email,
+                'type' => 1 // 1 = company, 2 = private person
+            ];
+        } else {
+            $payer_recipient = [
+                'name' => trim($first_name . ' ' . $last_name),
+                'vatNumber' => '',
+                'country' => $country,
+                'city' => $city,
+                'street' => $address_1,
+                'additionalAddress' => $address_2,
+                'postCode' => $postcode,
+                'phone' => $phone,
+                'email' => $email,
+                'type' => 2 // 1 = company, 2 = private person
+            ];
+        }
+
         $order_data = [
             'type' => 302, // RO document type
             'foreignNumber' => 'WC_' . $order->get_order_number(),
@@ -329,7 +389,9 @@ class WC_Optima_Integration
             'documentIssueDate' => date('Y-m-d\TH:i:s'),
             'documentPaymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
             'symbol' => 'RO',
-            'series' => 'WC'
+            'series' => 'WC',
+            'payer' => $payer_recipient,
+            'recipient' => $payer_recipient
         ];
 
         // Add customer data if available
