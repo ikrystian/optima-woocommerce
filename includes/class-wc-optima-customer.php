@@ -165,11 +165,10 @@ class WC_Optima_Customer
         $last_name = $order->get_billing_last_name();
         $company = $order->get_billing_company();
 
-        // Determine name1 (company name or full name)
-        $name1 = !empty($company) ? $company : trim($first_name . ' ' . $last_name);
-
         // Get VAT number (assuming it's stored in a custom field)
         $vat_number = $order->get_meta('_billing_vat', true);
+        // Get REGON (assuming it's stored in a custom field)
+        $regon = $order->get_meta('_billing_regon', true);
 
         // Get address details
         $country = $order->get_billing_country();
@@ -186,32 +185,83 @@ class WC_Optima_Customer
         $country_iso = $country;
         $country_name = WC()->countries->countries[$country] ?? $country;
 
-        // Prepare customer data for Optima
-        $customer_data = [
-            'code' => $customer_code,
-            'name1' => $first_name,
-            'name2' => $last_name,
-            'name3' => '',
-            'vatNumber' => $vat_number,
-            'country' => $country_name,
-            'city' => $city,
-            'street' => $address_1,
-            'additionalAdress' => $address_2,
-            'postCode' => $postcode,
-            'houseNumber' => '',
-            'flatNumber' => '',
-            'phone1' => $phone,
-            'phone2' => '',
-            'inactive' => 0,
-            'defaultPrice' => 0,
-            'regon' => '',
-            'email' => $email,
-            'paymentMethod' => 'gotówka',
-            'dateOfPayment' => 0,
-            'maxPaymentDelay' => 0,
-            'description' => __('Klient utworzony z WooCommerce', 'optima-woocommerce'),
-            'countryCode' => 'PL'
-        ];
+        // Determine customer type (B2B/B2C)
+        $customer_type = '';
+        if ($customer_id > 0) {
+            $customer_type = get_user_meta($customer_id, '_optima_customer_type', true);
+        }
+        if (empty($customer_type)) {
+            $customer_type = $order->get_meta('_optima_customer_type', true);
+        }
+        $customer_type = strtolower($customer_type);
+
+        // Default values
+        $inactive = 0;
+        $defaultPrice = 0;
+        $paymentMethod = 'gotówka';
+        $dateOfPayment = 0;
+        $maxPaymentDelay = 0;
+        $description = __('Klient utworzony z WooCommerce', 'optima-woocommerce');
+        $countryCode = $country_iso ?: 'PL';
+
+        // Map required fields based on customer type
+        if ($customer_type === 'b2b') {
+            // B2B (company)
+            $customer_data = [
+                'code' => $customer_code,
+                'name1' => $company ?: trim($first_name . ' ' . $last_name),
+                'name2' => '',
+                'name3' => '',
+                'vatNumber' => $vat_number,
+                'regon' => $regon,
+                'country' => $country_name,
+                'city' => $city,
+                'street' => $address_1,
+                'additionalAdress' => $address_2,
+                'postCode' => $postcode,
+                'houseNumber' => '',
+                'flatNumber' => '',
+                'phone1' => $phone,
+                'phone2' => '',
+                'inactive' => $inactive,
+                'defaultPrice' => $defaultPrice,
+                'email' => $email,
+                'paymentMethod' => $paymentMethod,
+                'dateOfPayment' => $dateOfPayment,
+                'maxPaymentDelay' => $maxPaymentDelay,
+                'description' => $description,
+                'countryCode' => $countryCode,
+                'customerType' => 'b2b'
+            ];
+        } else {
+            // B2C (individual)
+            $customer_data = [
+                'code' => $customer_code,
+                'name1' => $first_name,
+                'name2' => $last_name,
+                'name3' => '',
+                'vatNumber' => '',
+                'regon' => '',
+                'country' => $country_name,
+                'city' => $city,
+                'street' => $address_1,
+                'additionalAdress' => $address_2,
+                'postCode' => $postcode,
+                'houseNumber' => '',
+                'flatNumber' => '',
+                'phone1' => $phone,
+                'phone2' => '',
+                'inactive' => $inactive,
+                'defaultPrice' => $defaultPrice,
+                'email' => $email,
+                'paymentMethod' => $paymentMethod,
+                'dateOfPayment' => $dateOfPayment,
+                'maxPaymentDelay' => $maxPaymentDelay,
+                'description' => $description,
+                'countryCode' => $countryCode,
+                'customerType' => 'b2c'
+            ];
+        }
 
         return $customer_data;
     }
