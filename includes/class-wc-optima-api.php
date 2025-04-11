@@ -652,6 +652,10 @@ class WC_Optima_API
                         $error_message = $e->getMessage();
                     }
 
+                    // Log full request and response for debugging
+                    error_log('Optima RO request payload: ' . json_encode($order_data));
+                    error_log('Optima RO response body: ' . $body);
+
                     error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
 
                     // Client errors (4xx) are usually not worth retrying unless it's a rate limit (429)
@@ -671,7 +675,9 @@ class WC_Optima_API
                         'error' => true,
                         'status_code' => $status_code,
                         'message' => $error_message,
-                        'retries' => $retry_count
+                        'retries' => $retry_count,
+                        'optima_request' => $order_data,
+                        'optima_response' => $body
                     ];
                 } catch (\GuzzleHttp\Exception\ServerException $e) {
                     // Handle 5xx errors (server errors)

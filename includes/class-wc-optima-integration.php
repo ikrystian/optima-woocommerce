@@ -346,32 +346,31 @@ class WC_Optima_Integration
         // Determine if company or private person
         $is_company = !empty($company) && !empty($vat_number);
 
-        // Build payer/recipient arrays
+        // Build payer/recipient arrays according to Optima API spec
+        $customer_code = 'WC_' . date('Ymd') . '_' . $order->get_id();
         if ($is_company) {
             $payer_recipient = [
-                'name' => $company,
+                'code' => $customer_code,
+                'name1' => $company,
                 'vatNumber' => $vat_number,
                 'country' => $country,
                 'city' => $city,
                 'street' => $address_1,
-                'additionalAddress' => $address_2,
                 'postCode' => $postcode,
                 'phone' => $phone,
-                'email' => $email,
-                'type' => 1 // 1 = company, 2 = private person
+                'email' => $email
             ];
         } else {
             $payer_recipient = [
-                'name' => trim($first_name . ' ' . $last_name),
+                'code' => $customer_code,
+                'name1' => trim($first_name . ' ' . $last_name),
                 'vatNumber' => '',
                 'country' => $country,
                 'city' => $city,
                 'street' => $address_1,
-                'additionalAddress' => $address_2,
                 'postCode' => $postcode,
                 'phone' => $phone,
-                'email' => $email,
-                'type' => 2 // 1 = company, 2 = private person
+                'email' => $email
             ];
         }
 
