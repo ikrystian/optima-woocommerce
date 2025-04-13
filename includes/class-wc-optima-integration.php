@@ -94,6 +94,13 @@ class WC_Optima_Integration
     private $account;
 
     /**
+     * Instance of the order actions handler
+     *
+     * @var WC_Optima_Order_Actions
+     */
+    private $order_actions;
+
+    /**
      * Plugin options
      *
      * @var array
@@ -147,6 +154,10 @@ class WC_Optima_Integration
         // Add hook for updating document type after payment
         add_action('woocommerce_payment_complete', array($this, 'update_document_type_after_payment'), 20, 1);
         add_action('woocommerce_order_status_completed', array($this, 'update_document_type_after_payment'), 20, 1);
+
+        // Add hook for generating and saving invoice PDF after payment
+        add_action('woocommerce_payment_complete', array($this, 'generate_and_save_invoice_pdf'), 30, 1);
+        add_action('woocommerce_order_status_completed', array($this, 'generate_and_save_invoice_pdf'), 30, 1);
     }
 
     /**
@@ -189,6 +200,9 @@ class WC_Optima_Integration
 
         // Load Account class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-account.php';
+
+        // Load Order Actions class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-order-actions.php';
     }
 
     /**
@@ -226,6 +240,9 @@ class WC_Optima_Integration
 
         // Initialize Account handler
         $this->account = new WC_Optima_Account($this->options);
+
+        // Initialize Order Actions handler
+        $this->order_actions = new WC_Optima_Order_Actions();
     }
 
     /**
@@ -520,6 +537,14 @@ class WC_Optima_Integration
             return;
         }
 
+        // Check if document type is already set to invoice
+        $document_type = get_post_meta($order_id, 'optima_document_type', true);
+
+        if ($document_type === 'invoice') {
+            error_log(sprintf(__('Integracja WC Optima: Dokument dla zamówienia %s jest już fakturą', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
         // Get the document from Optima
         $document = self::$api->get_ro_document_by_id($ro_document_id);
 
@@ -572,5 +597,78 @@ class WC_Optima_Integration
             );
             error_log(sprintf(__('Integracja WC Optima: Nie udało się zaktualizować dokumentu dla zamówienia %s', 'optima-woocommerce'), $order_id));
         }
+    }
+
+    /**
+     * Generate and save invoice PDF after payment
+     *
+     * When an order is paid, generate and save the invoice PDF from Optima
+     *
+     * @param int $order_id Order ID
+     */
+    public function generate_and_save_invoice_pdf($order_id)
+    {
+        // Get the order
+        $order = wc_get_order($order_id);
+
+        if (!$order) {
+            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono zamówienia - %s', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Check if document type is set to invoice
+        $document_type = get_post_meta($order_id, 'optima_document_type', true);
+
+        if ($document_type !== 'invoice') {
+            error_log(sprintf(__('Integracja WC Optima: Dokument dla zamówienia %s nie jest fakturą', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Check if invoice PDF already generated
+        $invoice_pdf_url = get_post_meta($order_id, 'optima_invoice_pdf_url', true);
+
+        if (!empty($invoice_pdf_url)) {
+            error_log(sprintf(__('Integracja WC Optima: PDF faktury już istnieje dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Get the RO document ID (which is now an invoice)
+        $document_id = get_post_meta($order_id, 'optima_ro_document_id', true);
+
+        if (empty($document_id)) {
+            error_log(sprintf(__('Integracja WC Optima: Brak ID dokumentu dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Get invoice instance
+        $invoice_handler = self::get_invoice_instance();
+
+        if (!$invoice_handler) {
+            error_log(sprintf(__('Integracja WC Optima: Nie udało się uzyskać instancji obsługi faktur dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Generate and save invoice PDF
+        $pdf_url = $invoice_handler->get_and_save_invoice_pdf($order_id, $document_id);
+
+        if (!$pdf_url) {
+            error_log(sprintf(__('Integracja WC Optima: Nie udało się wygenerować PDF faktury dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Add a note to the order
+        $invoice_number = get_post_meta($order_id, 'optima_invoice_number', true);
+        if (empty($invoice_number)) {
+            $invoice_number = $document_id;
+        }
+
+        // Add a link to the invoice in the order details
+        wc_update_order_item_meta($order_id, 'optima_invoice_link', sprintf(
+            '<a href="%s" target="_blank">%s</a>',
+            esc_url($pdf_url),
+            sprintf(__('Faktura VAT %s', 'optima-woocommerce'), $invoice_number)
+        ));
+
+        error_log(sprintf(__('Integracja WC Optima: Wygenerowano PDF faktury dla zamówienia %s', 'optima-woocommerce'), $order_id));
     }
 }

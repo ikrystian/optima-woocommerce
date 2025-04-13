@@ -2,7 +2,7 @@
 
 /**
  * Invoice handling class for Optima WooCommerce integration
- * 
+ *
  * @package Optima_WooCommerce
  */
 
@@ -224,8 +224,8 @@ class WC_Optima_Invoice
         $pdf->SetHeaderData('', 0, 'Invoice ' . $invoice['invoiceNumber'], '');
 
         // Set header and footer fonts
-        $pdf->setHeaderFont(Array(PDF_FONT_NAME_MAIN, '', PDF_FONT_SIZE_MAIN));
-        $pdf->setFooterFont(Array(PDF_FONT_NAME_DATA, '', PDF_FONT_SIZE_DATA));
+        $pdf->setHeaderFont(array(PDF_FONT_NAME_MAIN, '', PDF_FONT_SIZE_MAIN));
+        $pdf->setFooterFont(array(PDF_FONT_NAME_DATA, '', PDF_FONT_SIZE_DATA));
 
         // Set default monospaced font
         $pdf->SetDefaultMonospacedFont(PDF_FONT_MONOSPACED);
@@ -285,27 +285,27 @@ class WC_Optima_Invoice
             // Create uploads directory if it doesn't exist
             $upload_dir = wp_upload_dir();
             $invoice_dir = $upload_dir['basedir'] . '/optima-invoices';
-            
+
             if (!file_exists($invoice_dir)) {
                 wp_mkdir_p($invoice_dir);
             }
-            
+
             // Create an index.php file to prevent directory listing
             if (!file_exists($invoice_dir . '/index.php')) {
                 file_put_contents($invoice_dir . '/index.php', '<?php // Silence is golden');
             }
-            
+
             // Generate a unique filename
             $filename = 'invoice-' . $invoice['invoiceNumber'] . '-' . time() . '.pdf';
             $filepath = $invoice_dir . '/' . $filename;
-            
+
             // Save the PDF to the file
             $pdf->Output($filepath, 'F');
-            
+
             // Return the URL to the PDF
             return $upload_dir['baseurl'] . '/optima-invoices/' . $filename;
         }
-        
+
         // Otherwise, return the PDF content
         return $pdf->Output('invoice.pdf', 'S');
     }
@@ -372,5 +372,168 @@ class WC_Optima_Invoice
         // For simplicity, we'll just return the HTML as a string
         // In a real-world scenario, you would use a library like DOMPDF or mPDF to convert HTML to PDF
         return $html;
+    }
+
+    /**
+     * Get and save invoice PDF for an order
+     *
+     * @param int $order_id WooCommerce order ID
+     * @param string $invoice_id Optima invoice ID
+     * @return string|false URL to the saved PDF or false on failure
+     */
+    public function get_and_save_invoice_pdf($order_id, $invoice_id)
+    {
+        // Get the PDF content from Optima API
+        $pdf_content = $this->api->get_invoice_pdf_by_id($invoice_id);
+
+        if (!$pdf_content) {
+            error_log(sprintf(__('Integracja WC Optima: Nie udało się pobrać PDF faktury dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return false;
+        }
+
+        // Get order to extract invoice number
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono zamówienia %s', 'optima-woocommerce'), $order_id));
+            return false;
+        }
+
+        // Get invoice data to extract invoice number
+        $invoice = $this->api->get_optima_invoice_by_id($invoice_id);
+        $invoice_number = isset($invoice['invoiceNumber']) ? $invoice['invoiceNumber'] : 'unknown';
+
+        // Create uploads directory if it doesn't exist
+        $upload_dir = wp_upload_dir();
+        $invoice_dir = $upload_dir['basedir'] . '/optima-invoices';
+
+        if (!file_exists($invoice_dir)) {
+            wp_mkdir_p($invoice_dir);
+        }
+
+        // Create an index.php file to prevent directory listing
+        if (!file_exists($invoice_dir . '/index.php')) {
+            file_put_contents($invoice_dir . '/index.php', '<?php // Silence is golden');
+        }
+
+        // Generate a unique filename
+        $filename = 'faktura-' . $invoice_number . '-' . $order_id . '.pdf';
+        $filepath = $invoice_dir . '/' . $filename;
+
+        // Save the PDF to the file
+        $result = file_put_contents($filepath, $pdf_content);
+
+        if ($result === false) {
+            error_log(sprintf(__('Integracja WC Optima: Nie udało się zapisać pliku PDF faktury dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return false;
+        }
+
+        // Store the PDF URL in order meta
+        $pdf_url = $upload_dir['baseurl'] . '/optima-invoices/' . $filename;
+        update_post_meta($order_id, 'optima_invoice_pdf_url', $pdf_url);
+        update_post_meta($order_id, 'optima_invoice_number', $invoice_number);
+
+        // Add a note to the order
+        $order->add_order_note(
+            sprintf(
+                __('Faktura VAT %s została wygenerowana i zapisana. <a href="%s" target="_blank">Pobierz fakturę</a>', 'optima-woocommerce'),
+                $invoice_number,
+                $pdf_url
+            )
+        );
+
+        return $pdf_url;
+    }
+
+    /**
+     * Send invoice PDF to customer via email
+     *
+     * @param int $order_id WooCommerce order ID
+     * @return bool True if email was sent successfully, false otherwise
+     */
+    public function send_invoice_pdf_email($order_id)
+    {
+        // Get the order
+        $order = wc_get_order($order_id);
+
+        if (!$order) {
+            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono zamówienia %s podczas próby wysłania faktury', 'optima-woocommerce'), $order_id));
+            return false;
+        }
+
+        // Check if invoice PDF exists
+        $invoice_pdf_url = get_post_meta($order_id, 'optima_invoice_pdf_url', true);
+
+        if (empty($invoice_pdf_url)) {
+            error_log(sprintf(__('Integracja WC Optima: Brak PDF faktury dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return false;
+        }
+
+        // Get invoice number
+        $invoice_number = get_post_meta($order_id, 'optima_invoice_number', true);
+        if (empty($invoice_number)) {
+            $invoice_number = get_post_meta($order_id, 'optima_ro_document_id', true);
+            if (empty($invoice_number)) {
+                $invoice_number = __('Faktura VAT', 'optima-woocommerce');
+            }
+        }
+
+        // Get file path from URL
+        $upload_dir = wp_upload_dir();
+        $file_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $invoice_pdf_url);
+
+        if (!file_exists($file_path)) {
+            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono pliku faktury %s dla zamówienia %s', 'optima-woocommerce'), $file_path, $order_id));
+            return false;
+        }
+
+        // Get customer email
+        $customer_email = $order->get_billing_email();
+        if (empty($customer_email)) {
+            error_log(sprintf(__('Integracja WC Optima: Brak adresu email klienta dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return false;
+        }
+
+        // Get store name
+        $store_name = get_bloginfo('name');
+
+        // Prepare email
+        $subject = sprintf(__('Faktura VAT %s dla zamówienia %s', 'optima-woocommerce'), $invoice_number, $order->get_order_number());
+
+        // Email content
+        $content = sprintf(
+            __('Szanowny Kliencie,<br><br>Dziękujemy za złożenie zamówienia w %s.<br><br>W załączniku znajdziesz fakturę VAT %s dla zamówienia nr %s.<br><br>Pozdrawiamy,<br>Zespół %s', 'optima-woocommerce'),
+            $store_name,
+            $invoice_number,
+            $order->get_order_number(),
+            $store_name
+        );
+
+        // Set up email headers
+        $headers = array(
+            'Content-Type: text/html; charset=UTF-8',
+            'From: ' . $store_name . ' <' . get_option('admin_email') . '>'
+        );
+
+        // Send email with attachment
+        $mail_sent = wp_mail($customer_email, $subject, $content, $headers, array($file_path));
+
+        if ($mail_sent) {
+            // Add note to order
+            $order->add_order_note(
+                sprintf(
+                    __('Faktura VAT %s została wysłana na adres email klienta: %s', 'optima-woocommerce'),
+                    $invoice_number,
+                    $customer_email
+                )
+            );
+
+            // Log success
+            error_log(sprintf(__('Integracja WC Optima: Faktura VAT dla zamówienia %s została wysłana na adres %s', 'optima-woocommerce'), $order_id, $customer_email));
+            return true;
+        } else {
+            // Log error
+            error_log(sprintf(__('Integracja WC Optima: Błąd podczas wysyłania faktury VAT dla zamówienia %s na adres %s', 'optima-woocommerce'), $order_id, $customer_email));
+            return false;
+        }
     }
 }

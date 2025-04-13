@@ -35,6 +35,7 @@ class WC_Optima_AJAX
         // Register AJAX handlers
         add_action('wp_ajax_wc_optima_verify_company', array($this, 'verify_company'));
         add_action('wp_ajax_nopriv_wc_optima_verify_company', array($this, 'verify_company'));
+        add_action('wp_ajax_wc_optima_send_invoice_email', array($this, 'send_invoice_email'));
     }
 
     /**
@@ -122,5 +123,42 @@ class WC_Optima_AJAX
         }
 
         wp_send_json_success($result);
+    }
+
+    /**
+     * Send invoice email to customer
+     */
+    public function send_invoice_email()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_send_invoice_email')) {
+            wp_send_json_error(__('Nieprawidłowy token bezpieczeństwa', 'optima-woocommerce'));
+            return;
+        }
+
+        // Check if order ID is provided
+        if (!isset($_POST['order_id']) || empty($_POST['order_id'])) {
+            wp_send_json_error(__('ID zamówienia jest wymagane', 'optima-woocommerce'));
+            return;
+        }
+
+        $order_id = intval($_POST['order_id']);
+
+        // Get invoice instance
+        $invoice_handler = WC_Optima_Integration::get_invoice_instance();
+
+        if (!$invoice_handler) {
+            wp_send_json_error(__('Nie udało się uzyskać instancji obsługi faktur', 'optima-woocommerce'));
+            return;
+        }
+
+        // Send invoice email
+        $result = $invoice_handler->send_invoice_pdf_email($order_id);
+
+        if ($result) {
+            wp_send_json_success(__('Faktura została wysłana na adres email klienta', 'optima-woocommerce'));
+        } else {
+            wp_send_json_error(__('Nie udało się wysłać faktury. Sprawdź logi serwera.', 'optima-woocommerce'));
+        }
     }
 }
