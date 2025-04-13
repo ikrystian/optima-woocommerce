@@ -1177,4 +1177,244 @@ class WC_Optima_API
 
         return $customer;
     }
+
+    /**
+     * Update document in Optima
+     *
+     * @param string $document_id Document ID
+     * @param array $document_data Document data to update
+     * @return array|false Updated document data if successful, false or error array on failure
+     */
+    public function update_document($document_id, $document_data)
+    {
+        $token = $this->get_access_token();
+
+        if (!$token) {
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu do aktualizacji dokumentu', 'optima-woocommerce'));
+            return [
+                'error' => true,
+                'message' => __('Nie udało się uzyskać tokena dostępu do API Optima', 'optima-woocommerce')
+            ];
+        }
+
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\GuzzleHttp\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->update_document_with_wp_http($token, $document_id, $document_data);
+            }
+
+            $client = new \GuzzleHttp\Client();
+
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json'
+                ],
+                'body' => json_encode($document_data)
+            ];
+
+            // Add retry mechanism for Guzzle requests
+            $max_retries = 3; // Maximum number of retry attempts
+            $retry_delay = 2; // Delay between retries in seconds
+            $retry_count = 0;
+
+            while ($retry_count <= $max_retries) {
+                try {
+                    $response = $client->request('PUT', $this->api_url . '/Documents/' . $document_id, $options);
+                    $result = json_decode($response->getBody()->getContents(), true);
+                    return $result;
+                } catch (\GuzzleHttp\Exception\ClientException $e) {
+                    // Handle 4xx errors (client errors)
+                    $response = $e->getResponse();
+                    $status_code = $response->getStatusCode();
+                    $body = $response->getBody()->getContents();
+                    $result = json_decode($body, true);
+
+                    $error_message = '';
+                    // Try to extract error message from response
+                    if (is_array($result) && isset($result['Message'])) {
+                        $error_message = $result['Message'];
+                    } elseif (is_array($result) && isset($result['message'])) {
+                        $error_message = $result['message'];
+                    } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
+                        $error_message = $result['error']['message'];
+                    } elseif (!empty($body)) {
+                        $error_message = $body;
+                    } else {
+                        $error_message = $e->getMessage();
+                    }
+
+                    // Log full request and response for debugging
+                    error_log('Optima document update request payload: ' . json_encode($document_data));
+                    error_log('Optima document update response body: ' . $body);
+
+                    error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
+
+                    // Client errors (4xx) are usually not worth retrying unless it's a rate limit (429)
+                    if ($status_code == 429 && $retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    return [
+                        'error' => true,
+                        'status_code' => $status_code,
+                        'message' => $error_message,
+                        'retries' => $retry_count,
+                        'optima_request' => $document_data,
+                        'optima_response' => $body
+                    ];
+                } catch (\GuzzleHttp\Exception\ServerException $e) {
+                    // Handle 5xx errors (server errors)
+                    error_log(__('Integracja WC Optima: Błąd serwera podczas aktualizacji dokumentu - ', 'optima-woocommerce') . $e->getMessage());
+
+                    // Server errors are good candidates for retry
+                    if ($retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    // Fall back to WordPress HTTP API after exhausting retries
+                    return $this->update_document_with_wp_http($token, $document_id, $document_data);
+                } catch (\GuzzleHttp\Exception\ConnectException $e) {
+                    // Handle connection errors
+                    error_log(__('Integracja WC Optima: Błąd połączenia podczas aktualizacji dokumentu - ', 'optima-woocommerce') . $e->getMessage());
+
+                    // Connection errors are good candidates for retry
+                    if ($retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    // Fall back to WordPress HTTP API after exhausting retries
+                    return $this->update_document_with_wp_http($token, $document_id, $document_data);
+                }
+            }
+        } catch (Exception $e) {
+            error_log(__('Integracja WC Optima: Błąd podczas aktualizacji dokumentu - ', 'optima-woocommerce') . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->update_document_with_wp_http($token, $document_id, $document_data);
+        }
+    }
+
+    /**
+     * Update document using WordPress HTTP API as a fallback
+     *
+     * @param string $token The access token
+     * @param string $document_id Document ID
+     * @param array $document_data Document data to update
+     * @param int $retry_count Number of retries attempted (default 0)
+     * @return array|false Updated document data if successful, false or error array on failure
+     */
+    private function update_document_with_wp_http($token, $document_id, $document_data, $retry_count = 0)
+    {
+        $max_retries = 3; // Maximum number of retry attempts
+        $retry_delay = 2; // Delay between retries in seconds
+
+        $response = wp_remote_request($this->api_url . '/Documents/' . $document_id, [
+            'method' => 'PUT',
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode($document_data)
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
+
+            // Retry on connection errors if we haven't exceeded max retries
+            if ($retry_count < $max_retries) {
+                error_log(sprintf(
+                    __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                    $retry_count + 1,
+                    $max_retries,
+                    $retry_delay
+                ));
+
+                // Wait before retrying
+                sleep($retry_delay);
+
+                // Retry with incremented retry count
+                return $this->update_document_with_wp_http($token, $document_id, $document_data, $retry_count + 1);
+            }
+
+            return false;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $result = json_decode($body, true);
+
+        // Check for error responses (non-2xx status codes)
+        if ($status_code < 200 || $status_code >= 300) {
+            $error_message = '';
+
+            // Try to extract error message from response
+            if (is_array($result) && isset($result['Message'])) {
+                $error_message = $result['Message'];
+            } elseif (is_array($result) && isset($result['message'])) {
+                $error_message = $result['message'];
+            } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
+                $error_message = $result['error']['message'];
+            } elseif (!empty($body)) {
+                $error_message = $body;
+            } else {
+                $error_message = 'Unknown error (Status code: ' . $status_code . ')';
+            }
+
+            error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
+
+            // Retry on server errors (5xx) if we haven't exceeded max retries
+            if ($status_code >= 500 && $retry_count < $max_retries) {
+                error_log(sprintf(
+                    __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                    $retry_count + 1,
+                    $max_retries,
+                    $retry_delay
+                ));
+
+                // Wait before retrying
+                sleep($retry_delay);
+
+                // Retry with incremented retry count
+                return $this->update_document_with_wp_http($token, $document_id, $document_data, $retry_count + 1);
+            }
+
+            // Return the error information so it can be used in the order note
+            return [
+                'error' => true,
+                'status_code' => $status_code,
+                'message' => $error_message,
+                'retries' => $retry_count
+            ];
+        }
+
+        return $result;
+    }
 }

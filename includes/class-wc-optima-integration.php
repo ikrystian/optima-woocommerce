@@ -143,6 +143,10 @@ class WC_Optima_Integration
         // Add hooks for RO document creation
         add_action('woocommerce_payment_complete', array($this, 'create_ro_document_for_order'), 10, 1);
         add_action('woocommerce_order_status_processing', array($this, 'create_ro_document_for_order'), 10, 1);
+
+        // Add hook for updating document type after payment
+        add_action('woocommerce_payment_complete', array($this, 'update_document_type_after_payment'), 20, 1);
+        add_action('woocommerce_order_status_completed', array($this, 'update_document_type_after_payment'), 20, 1);
     }
 
     /**
@@ -488,6 +492,85 @@ class WC_Optima_Integration
                 __('Nie udało się utworzyć dokumentu RO Optima.', 'optima-woocommerce')
             );
             error_log(sprintf(__('Integracja WC Optima: Nie udało się utworzyć dokumentu RO dla zamówienia %s', 'optima-woocommerce'), $order_id));
+        }
+    }
+
+    /**
+     * Update document type after payment
+     *
+     * When an order is paid, update the document type in Optima to invoice type and mark as paid
+     *
+     * @param int $order_id Order ID
+     */
+    public function update_document_type_after_payment($order_id)
+    {
+        // Get the order
+        $order = wc_get_order($order_id);
+
+        if (!$order) {
+            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono zamówienia - %s', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Check if RO document exists for this order
+        $ro_document_id = get_post_meta($order_id, 'optima_ro_document_id', true);
+
+        if (empty($ro_document_id)) {
+            error_log(sprintf(__('Integracja WC Optima: Brak dokumentu RO dla zamówienia %s', 'optima-woocommerce'), $order_id));
+            return;
+        }
+
+        // Get the document from Optima
+        $document = self::$api->get_ro_document_by_id($ro_document_id);
+
+        if (!$document) {
+            error_log(sprintf(__('Integracja WC Optima: Nie udało się pobrać dokumentu RO %s dla zamówienia %s', 'optima-woocommerce'), $ro_document_id, $order_id));
+            return;
+        }
+
+        // Prepare document data for update
+        $update_data = [
+            'type' => 301, // Invoice document type (301 is the type for invoice)
+            'status' => 2,  // Status 2 means paid
+            'documentPaymentDate' => date('Y-m-d\TH:i:s'), // Current date as payment date
+        ];
+
+        // Update the document in Optima
+        $result = self::$api->update_document($ro_document_id, $update_data);
+
+        if ($result && !isset($result['error'])) {
+            // Add a note to the order
+            $order->add_order_note(
+                sprintf(
+                    __('Zaktualizowano dokument w Optima: %s. Zmieniono typ na fakturę i oznaczono jako opłacony.', 'optima-woocommerce'),
+                    $ro_document_id
+                )
+            );
+
+            // Store the updated document type in the order meta
+            update_post_meta($order_id, 'optima_document_type', 'invoice');
+            update_post_meta($order_id, 'optima_document_status', 'paid');
+        } elseif (is_array($result) && isset($result['error']) && $result['error'] === true) {
+            // Handle specific error response
+            $error_message = isset($result['message']) ? $result['message'] : __('Nieznany błąd', 'optima-woocommerce');
+            $status_code = isset($result['status_code']) ? $result['status_code'] : '';
+
+            // Add a note to the order with detailed error information
+            $order->add_order_note(
+                sprintf(
+                    __('Nie udało się zaktualizować dokumentu w Optima. Błąd %s: %s', 'optima-woocommerce'),
+                    $status_code,
+                    $error_message
+                )
+            );
+
+            error_log(sprintf(__('Integracja WC Optima: Błąd podczas aktualizacji dokumentu dla zamówienia %s: %s', 'optima-woocommerce'), $order_id, $error_message));
+        } else {
+            // Generic failure
+            $order->add_order_note(
+                __('Nie udało się zaktualizować dokumentu w Optima.', 'optima-woocommerce')
+            );
+            error_log(sprintf(__('Integracja WC Optima: Nie udało się zaktualizować dokumentu dla zamówienia %s', 'optima-woocommerce'), $order_id));
         }
     }
 }
