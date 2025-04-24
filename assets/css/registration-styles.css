@@ -1,18 +1,13 @@
-/**
- * Registration form styles
- */
 .wc-optima-registration-form {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
-  background-color: #f8f8f8;
   border-radius: 5px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
 .wc-optima-registration-form h2 {
   margin-bottom: 20px;
-  text-align: center;
+  text-align: left;
   color: #333;
 }
 
@@ -43,7 +38,7 @@
 .form-group label {
   display: block;
   margin-bottom: 5px;
-  font-weight: bold;
+  font-weight: 400;
 }
 
 .form-group .input-text {
@@ -55,6 +50,66 @@
 
 .form-group .input-text.error {
   border-color: #e2401c;
+}
+
+/* Password field wrapper and toggle icon styles */
+.password-field-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+}
+
+.password-field-wrapper .input-text {
+  flex: 1;
+  padding-right: 35px; /* Make room for the toggle icon */
+}
+
+.password-toggle-icon {
+  position: absolute;
+  right: 10px;
+  width: 20px;
+  top: 7px;
+  height: 20px;
+  cursor: pointer;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%23555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>');
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.password-toggle-icon:hover {
+  opacity: 1;
+}
+
+.password-toggle-icon.show-password {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%23555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>');
+}
+
+/* Style dla komunikatu o widoczności hasła */
+.password-visibility-message {
+  display: block;
+  font-size: 0.85em;
+  margin-top: 5px;
+  padding: 3px 8px;
+  background-color: #e7f5ff;
+  color: #0073aa;
+  border-radius: 3px;
+  border-left: 3px solid #0073aa;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .form-group .error-message {
@@ -72,8 +127,7 @@
 }
 
 .form-group .checkbox {
-  display: flex;
-  align-items: flex-start;
+  font-weight: 500;
 }
 
 .form-group .checkbox input {
@@ -87,8 +141,6 @@
 
 .form-group button {
   padding: 10px 20px;
-  background-color: #2271b1;
-  color: #fff;
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -97,6 +149,7 @@
 
 .form-group button:hover {
   background-color: #135e96;
+  color: #fff;
 }
 
 #verify-company {
@@ -219,3 +272,4 @@ input.verified-field {
     margin-right: 0;
   }
 }
+

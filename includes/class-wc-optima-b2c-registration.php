@@ -173,69 +173,74 @@ class WC_Optima_B2C_Registration extends WC_Optima_Registration
             echo '<script>window.location.href = "' . esc_url($result['redirect']) . '";</script>';
             return;
         }
-        ?>
+?>
         <div class="wc-optima-registration-form b2c-registration-form">
             <h2><?php _e('Rejestracja konta indywidualnego (B2C)', 'optima-woocommerce'); ?></h2>
-            
+
             <form method="post" id="wc-optima-b2c-registration-form">
                 <?php wp_nonce_field('wc_optima_b2c_register', 'wc_optima_b2c_register_nonce'); ?>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="first_name"><?php _e('Imię', 'optima-woocommerce'); ?> <span class="required">*</span></label>
                         <input type="text" name="first_name" id="first_name" class="input-text" value="<?php echo isset($_POST['first_name']) ? esc_attr($_POST['first_name']) : ''; ?>" required>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="last_name"><?php _e('Nazwisko', 'optima-woocommerce'); ?> <span class="required">*</span></label>
                         <input type="text" name="last_name" id="last_name" class="input-text" value="<?php echo isset($_POST['last_name']) ? esc_attr($_POST['last_name']) : ''; ?>" required>
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="email"><?php _e('Adres e-mail', 'optima-woocommerce'); ?> <span class="required">*</span></label>
                         <input type="email" name="email" id="email" class="input-text" value="<?php echo isset($_POST['email']) ? esc_attr($_POST['email']) : ''; ?>" required>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="phone"><?php _e('Telefon', 'optima-woocommerce'); ?></label>
                         <input type="tel" name="phone" id="phone" class="input-text" value="<?php echo isset($_POST['phone']) ? esc_attr($_POST['phone']) : ''; ?>">
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="address"><?php _e('Adres', 'optima-woocommerce'); ?></label>
                         <input type="text" name="address" id="address" class="input-text" value="<?php echo isset($_POST['address']) ? esc_attr($_POST['address']) : ''; ?>">
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="postcode"><?php _e('Kod pocztowy', 'optima-woocommerce'); ?></label>
                         <input type="text" name="postcode" id="postcode" class="input-text" value="<?php echo isset($_POST['postcode']) ? esc_attr($_POST['postcode']) : ''; ?>">
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="city"><?php _e('Miasto', 'optima-woocommerce'); ?></label>
                         <input type="text" name="city" id="city" class="input-text" value="<?php echo isset($_POST['city']) ? esc_attr($_POST['city']) : ''; ?>">
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="password"><?php _e('Hasło', 'optima-woocommerce'); ?> <span class="required">*</span></label>
-                        <input type="password" name="password" id="password" class="input-text" required>
-                        <small class="password-hint"><?php _e('Hasło musi mieć co najmniej 8 znaków i zawierać co najmniej jedną dużą literę, jedną małą literę i jedną cyfrę.', 'optima-woocommerce'); ?></small>
+                        <div class="password-field-wrapper">
+                            <input type="password" name="password" id="password" class="input-text" required>
+                            <span class="password-toggle-icon" title="<?php _e('Pokaż/Ukryj hasło', 'optima-woocommerce'); ?>"></span>
+                        </div>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="password_confirm"><?php _e('Potwierdzenie hasła', 'optima-woocommerce'); ?> <span class="required">*</span></label>
-                        <input type="password" name="password_confirm" id="password_confirm" class="input-text" required>
+                        <div class="password-field-wrapper">
+                            <input type="password" name="password_confirm" id="password_confirm" class="input-text" required>
+                            <span class="password-toggle-icon" title="<?php _e('Pokaż/Ukryj hasło', 'optima-woocommerce'); ?>"></span>
+                        </div>
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <label class="checkbox">
@@ -244,13 +249,13 @@ class WC_Optima_B2C_Registration extends WC_Optima_Registration
                         </label>
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <button type="submit" name="wc_optima_b2c_register" class="button" value="register"><?php _e('Zarejestruj się', 'optima-woocommerce'); ?></button>
                     </div>
                 </div>
-                
+
                 <div class="form-row">
                     <div class="form-group">
                         <p><?php _e('Masz już konto?', 'optima-woocommerce'); ?> <a href="<?php echo esc_url(wc_get_page_permalink('myaccount')); ?>"><?php _e('Zaloguj się', 'optima-woocommerce'); ?></a></p>
@@ -259,6 +264,6 @@ class WC_Optima_B2C_Registration extends WC_Optima_Registration
                 </div>
             </form>
         </div>
-        <?php
+<?php
     }
 }

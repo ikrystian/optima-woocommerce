@@ -287,13 +287,18 @@ class WC_Optima_B2B_Registration extends WC_Optima_Registration
                 <div class="form-row">
                     <div class="form-group">
                         <label for="password"><?php _e('Hasło', 'optima-woocommerce'); ?> <span class="required">*</span></label>
-                        <input type="password" name="password" id="password" class="input-text" required>
-                        <small class="password-hint"><?php _e('Hasło musi mieć co najmniej 8 znaków i zawierać co najmniej jedną dużą literę, jedną małą literę i jedną cyfrę.', 'optima-woocommerce'); ?></small>
+                        <div class="password-field-wrapper">
+                            <input type="password" name="password" id="password" class="input-text" required>
+                            <span class="password-toggle-icon" title="<?php _e('Pokaż/Ukryj hasło', 'optima-woocommerce'); ?>"></span>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label for="password_confirm"><?php _e('Potwierdzenie hasła', 'optima-woocommerce'); ?> <span class="required">*</span></label>
-                        <input type="password" name="password_confirm" id="password_confirm" class="input-text" required>
+                        <div class="password-field-wrapper">
+                            <input type="password" name="password_confirm" id="password_confirm" class="input-text" required>
+                            <span class="password-toggle-icon" title="<?php _e('Pokaż/Ukryj hasło', 'optima-woocommerce'); ?>"></span>
+                        </div>
                     </div>
                 </div>
 

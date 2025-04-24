@@ -2,96 +2,117 @@
  * Registration form validation script
  */
 jQuery(document).ready(function ($) {
+  // Teksty dla przełącznika widoczności hasła
+  const passwordVisibilityTexts = {
+    show: "Pokaż hasło",
+    hide: "Ukryj hasło",
+  };
+
+  // Password visibility toggle functionality
+  $(".password-toggle-icon").on("click", function () {
+    const passwordField = $(this).siblings("input");
+    const currentType = passwordField.attr("type");
+
+    // Toggle between password and text type
+    if (currentType === "password") {
+      passwordField.attr("type", "text");
+      $(this).addClass("show-password");
+      $(this).attr("title", passwordVisibilityTexts.hide);
+      // Dodaj komunikat informacyjny
+      if (!$(this).parent().next(".password-visibility-message").length) {
+        $(this)
+          .parent()
+          .after('<span class="password-visibility-message">Hasło jest teraz widoczne</span>');
+        // Ukryj komunikat po 2 sekundach
+        setTimeout(function () {
+          $(".password-visibility-message").fadeOut(300, function () {
+            $(this).remove();
+          });
+        }, 2000);
+      }
+    } else {
+      passwordField.attr("type", "password");
+      $(this).removeClass("show-password");
+      $(this).attr("title", passwordVisibilityTexts.show);
+      if (!$(this).parent().next(".password-visibility-message").length) {
+        $(this)
+          .parent()
+          .after('<span class="password-visibility-message">Hasło jest teraz ukryte</span>');
+        // Ukryj komunikat po 2 sekundach
+        setTimeout(function () {
+          $(".password-visibility-message").fadeOut(300, function () {
+            $(this).remove();
+          });
+        }, 2000);
+      }
+    }
+  });
+
+  // Inicjalizacja tooltipów
+  $(".password-toggle-icon").each(function () {
+    $(this).attr("title", passwordVisibilityTexts.show);
+  });
+
   // B2C Registration form validation
   if ($("#wc-optima-b2c-registration-form").length) {
-    $("#wc-optima-b2c-registration-form").on("submit", function (e) {
+    const b2cForm = $("#wc-optima-b2c-registration-form");
+
+    // Field validation on blur
+    b2cForm.find("input[required]").on("blur", function () {
+      validateRequiredField($(this));
+    });
+
+    // Email validation on blur
+    $("#email").on("blur", function () {
+      validateEmailField($(this));
+    });
+
+    // Password strength validation on blur
+    $("#password").on("blur", function () {
+      validatePasswordStrength($(this));
+    });
+
+    // Password confirmation validation on blur
+    $("#password_confirm").on("blur", function () {
+      validatePasswordMatch($(this), $("#password"));
+    });
+
+    // Terms checkbox validation on change
+    $("#terms").on("change", function () {
+      validateTermsCheckbox($(this));
+    });
+
+    // Form submission validation (fallback)
+    b2cForm.on("submit", function (e) {
       var isValid = true;
 
-      // Validate required fields
+      // Validate all required fields
       $(this)
         .find("input[required]")
         .each(function () {
-          if ($(this).val() === "") {
-            $(this).addClass("error");
-            if (!$(this).next(".error-message").length) {
-              $(this).after(
-                '<span class="error-message">' +
-                  wc_optima_validation.required +
-                  "</span>"
-              );
-            }
+          if (!validateRequiredField($(this))) {
             isValid = false;
-          } else {
-            $(this).removeClass("error");
-            $(this).next(".error-message").remove();
           }
         });
 
       // Validate email
-      var emailField = $("#email");
-      if (emailField.val() !== "" && !isValidEmail(emailField.val())) {
-        emailField.addClass("error");
-        if (!emailField.next(".error-message").length) {
-          emailField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.email +
-              "</span>"
-          );
-        }
+      if (!validateEmailField($("#email"))) {
         isValid = false;
       }
 
       // Validate password strength
-      var passwordField = $("#password");
-      if (
-        passwordField.val() !== "" &&
-        !isStrongPassword(passwordField.val())
-      ) {
-        passwordField.addClass("error");
-        if (!passwordField.next(".error-message").length) {
-          passwordField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.password_strength +
-              "</span>"
-          );
-        }
+      if (!validatePasswordStrength($("#password"))) {
         isValid = false;
       }
 
       // Validate password confirmation
-      var passwordConfirmField = $("#password_confirm");
-      if (
-        passwordConfirmField.val() !== "" &&
-        passwordConfirmField.val() !== passwordField.val()
-      ) {
-        passwordConfirmField.addClass("error");
-        if (!passwordConfirmField.next(".error-message").length) {
-          passwordConfirmField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.password_match +
-              "</span>"
-          );
-        }
+      if (!validatePasswordMatch($("#password_confirm"), $("#password"))) {
         isValid = false;
       }
 
       // Validate terms checkbox
-      var termsCheckbox = $("#terms");
-      if (!termsCheckbox.is(":checked")) {
-        termsCheckbox.parent().addClass("error");
-        if (!termsCheckbox.parent().next(".error-message").length) {
-          termsCheckbox
-            .parent()
-            .after(
-              '<span class="error-message">' +
-                wc_optima_validation.required +
-                "</span>"
-            );
-        }
+      if (!validateTermsCheckbox($("#terms"))) {
         isValid = false;
-      } else {
-        termsCheckbox.parent().removeClass("error");
-        termsCheckbox.parent().next(".error-message").remove();
       }
 
       if (!isValid) {
@@ -102,6 +123,44 @@ jQuery(document).ready(function ($) {
 
   // B2B Registration form validation
   if ($("#wc-optima-b2b-registration-form").length) {
+    const b2bForm = $("#wc-optima-b2b-registration-form");
+
+    // Field validation on blur for required fields
+    b2bForm.find("input[required]").on("blur", function () {
+      validateRequiredField($(this));
+    });
+
+    // Email validation on blur
+    $("#email").on("blur", function () {
+      validateEmailField($(this));
+    });
+
+    // NIP validation on blur
+    $("#nip").on("blur", function () {
+      validateNIP($(this));
+    });
+
+    // No validation for REGON field
+    $("#regon").on("blur", function () {
+      $(this).removeClass("error");
+      $(this).next(".error-message").remove();
+    });
+
+    // Password strength validation on blur
+    $("#password").on("blur", function () {
+      validatePasswordStrength($(this));
+    });
+
+    // Password confirmation validation on blur
+    $("#password_confirm").on("blur", function () {
+      validatePasswordMatch($(this), $("#password"));
+    });
+
+    // Terms checkbox validation on change
+    $("#terms").on("change", function () {
+      validateTermsCheckbox($(this));
+    });
+
     // NIP verification button
     $("#verify-company").on("click", function () {
       var nip = $("#nip")
@@ -110,17 +169,13 @@ jQuery(document).ready(function ($) {
 
       if (nip.length !== 10) {
         $("#company-verification-status").html(
-          '<span class="error-message">' +
-            wc_optima_validation.nip_format +
-            "</span>"
+          '<span class="error-message">' + wc_optima_validation.nip_format + "</span>",
         );
         return;
       }
 
       $("#company-verification-status").html(
-        '<span class="verifying">' +
-          wc_optima_validation.verify_company +
-          "</span>"
+        '<span class="verifying">' + wc_optima_validation.verify_company + "</span>",
       );
 
       $.ajax({
@@ -134,18 +189,14 @@ jQuery(document).ready(function ($) {
         success: function (response) {
           if (response.success) {
             $("#company-verification-status").html(
-              '<span class="success">' +
-                wc_optima_validation.company_verified +
-                "</span>"
+              '<span class="success">' + wc_optima_validation.company_verified + "</span>",
             );
 
             // Fill company data
             if (response.data) {
               // Przypisz dane firmy do pól formularza i ustaw je jako tylko do odczytu
               if (response.data.name) {
-                $("#company_name")
-                  .val(response.data.name)
-                  .attr("readonly", true);
+                $("#company_name").val(response.data.name).attr("readonly", true);
               }
               if (response.data.regon) {
                 $("#regon").val(response.data.regon).attr("readonly", true);
@@ -154,9 +205,7 @@ jQuery(document).ready(function ($) {
                 $("#address").val(response.data.address).attr("readonly", true);
               }
               if (response.data.postcode) {
-                $("#postcode")
-                  .val(response.data.postcode)
-                  .attr("readonly", true);
+                $("#postcode").val(response.data.postcode).attr("readonly", true);
               }
               if (response.data.city) {
                 $("#city").val(response.data.city).attr("readonly", true);
@@ -171,27 +220,22 @@ jQuery(document).ready(function ($) {
                   wc_optima_validation.verified_readonly_info +
                   ' <button type="button" id="unlock-fields" class="button-small">' +
                   wc_optima_validation.unlock_fields_button +
-                  "</button></div>"
+                  "</button></div>",
               );
 
               // Obsługa przycisku do odblokowania pól
               $("#unlock-fields").on("click", function () {
-                $("input.verified-field")
-                  .removeAttr("readonly")
-                  .removeClass("verified-field");
+                $("input.verified-field").removeAttr("readonly").removeClass("verified-field");
                 $(".verified-info").remove();
                 $("#company-verification-status").append(
                   '<div class="warning-info">' +
                     wc_optima_validation.fields_unlocked_warning +
-                    "</div>"
+                    "</div>",
                 );
               });
 
               // Dodaj informacje debugowania, jeśli są dostępne
-              if (
-                response.data.debug_logs &&
-                response.data.debug_logs.length > 0
-              ) {
+              if (response.data.debug_logs && response.data.debug_logs.length > 0) {
                 var debugInfo =
                   '<div class="debug-info"><h4>' +
                   wc_optima_validation.debug_info_title +
@@ -206,11 +250,7 @@ jQuery(document).ready(function ($) {
             var debugInfo = "";
 
             // Dodaj informacje debugowania, jeśli są dostępne
-            if (
-              response.data &&
-              response.data.debug_logs &&
-              response.data.debug_logs.length > 0
-            ) {
+            if (response.data && response.data.debug_logs && response.data.debug_logs.length > 0) {
               debugInfo =
                 '<div class="debug-info"><h4>' +
                 wc_optima_validation.debug_info_title +
@@ -220,10 +260,7 @@ jQuery(document).ready(function ($) {
             }
 
             $("#company-verification-status").html(
-              '<span class="error-message">' +
-                errorMessage +
-                "</span>" +
-                debugInfo
+              '<span class="error-message">' + errorMessage + "</span>" + debugInfo,
             );
           }
         },
@@ -241,10 +278,7 @@ jQuery(document).ready(function ($) {
                 errorMessage = response.data.message;
 
                 // Dodaj informacje debugowania, jeśli są dostępne
-                if (
-                  response.data.debug_logs &&
-                  response.data.debug_logs.length > 0
-                ) {
+                if (response.data.debug_logs && response.data.debug_logs.length > 0) {
                   debugInfo =
                     '<div class="debug-info"><h4>' +
                     wc_optima_validation.debug_info_title +
@@ -259,138 +293,181 @@ jQuery(document).ready(function ($) {
           }
 
           $("#company-verification-status").html(
-            '<span class="error-message">' +
-              errorMessage +
-              "</span>" +
-              debugInfo
+            '<span class="error-message">' + errorMessage + "</span>" + debugInfo,
           );
         },
       });
     });
 
-    // Form validation on submit
-    $("#wc-optima-b2b-registration-form").on("submit", function (e) {
+    // Form validation on submit (fallback)
+    b2bForm.on("submit", function (e) {
       var isValid = true;
 
-      // Validate required fields
+      // Validate all required fields
       $(this)
         .find("input[required]")
         .each(function () {
-          if ($(this).val() === "") {
-            $(this).addClass("error");
-            if (!$(this).next(".error-message").length) {
-              $(this).after(
-                '<span class="error-message">' +
-                  wc_optima_validation.required +
-                  "</span>"
-              );
-            }
+          if (!validateRequiredField($(this))) {
             isValid = false;
-          } else {
-            $(this).removeClass("error");
-            $(this).next(".error-message").remove();
           }
         });
 
       // Validate NIP
-      var nipField = $("#nip");
-      if (nipField.val() !== "" && !isValidNIP(nipField.val())) {
-        nipField.addClass("error");
-        if (!nipField.next(".error-message").length) {
-          nipField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.nip_format +
-              "</span>"
-          );
-        }
+      if (!validateNIP($("#nip"))) {
         isValid = false;
       }
 
-      // Validate REGON if provided
-      var regonField = $("#regon");
-      if (regonField.val() !== "" && !isValidREGON(regonField.val())) {
-        regonField.addClass("error");
-        if (!regonField.next(".error-message").length) {
-          regonField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.regon_format +
-              "</span>"
-          );
-        }
-        isValid = false;
-      }
+      // REGON validation removed - no validation needed
 
       // Validate email
-      var emailField = $("#email");
-      if (emailField.val() !== "" && !isValidEmail(emailField.val())) {
-        emailField.addClass("error");
-        if (!emailField.next(".error-message").length) {
-          emailField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.email +
-              "</span>"
-          );
-        }
+      if (!validateEmailField($("#email"))) {
         isValid = false;
       }
 
       // Validate password strength
-      var passwordField = $("#password");
-      if (
-        passwordField.val() !== "" &&
-        !isStrongPassword(passwordField.val())
-      ) {
-        passwordField.addClass("error");
-        if (!passwordField.next(".error-message").length) {
-          passwordField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.password_strength +
-              "</span>"
-          );
-        }
+      if (!validatePasswordStrength($("#password"))) {
         isValid = false;
       }
 
       // Validate password confirmation
-      var passwordConfirmField = $("#password_confirm");
-      if (
-        passwordConfirmField.val() !== "" &&
-        passwordConfirmField.val() !== passwordField.val()
-      ) {
-        passwordConfirmField.addClass("error");
-        if (!passwordConfirmField.next(".error-message").length) {
-          passwordConfirmField.after(
-            '<span class="error-message">' +
-              wc_optima_validation.password_match +
-              "</span>"
-          );
-        }
+      if (!validatePasswordMatch($("#password_confirm"), $("#password"))) {
         isValid = false;
       }
 
       // Validate terms checkbox
-      var termsCheckbox = $("#terms");
-      if (!termsCheckbox.is(":checked")) {
-        termsCheckbox.parent().addClass("error");
-        if (!termsCheckbox.parent().next(".error-message").length) {
-          termsCheckbox
-            .parent()
-            .after(
-              '<span class="error-message">' +
-                wc_optima_validation.required +
-                "</span>"
-            );
-        }
+      if (!validateTermsCheckbox($("#terms"))) {
         isValid = false;
-      } else {
-        termsCheckbox.parent().removeClass("error");
-        termsCheckbox.parent().next(".error-message").remove();
       }
 
       if (!isValid) {
         e.preventDefault();
       }
     });
+  }
+
+  // Validation functions
+  function validateRequiredField(field) {
+    if (field.val() === "") {
+      field.addClass("error");
+      if (!field.next(".error-message").length) {
+        field.after('<span class="error-message">' + wc_optima_validation.required + "</span>");
+      }
+      return false;
+    } else {
+      field.removeClass("error");
+      field.next(".error-message").remove();
+      return true;
+    }
+  }
+
+  function validateEmailField(field) {
+    if (field.val() === "") {
+      return field.prop("required") ? validateRequiredField(field) : true;
+    }
+
+    if (!isValidEmail(field.val())) {
+      field.addClass("error");
+      if (!field.next(".error-message").length) {
+        field.after('<span class="error-message">' + wc_optima_validation.email + "</span>");
+      }
+      return false;
+    } else {
+      field.removeClass("error");
+      field.next(".error-message").remove();
+      return true;
+    }
+  }
+
+  function validatePasswordStrength(field) {
+    if (field.val() === "") {
+      return field.prop("required") ? validateRequiredField(field) : true;
+    }
+
+    if (!isStrongPassword(field.val())) {
+      field.addClass("error");
+      if (!field.next(".error-message").length) {
+        field.after(
+          '<span class="error-message">' + wc_optima_validation.password_strength + "</span>",
+        );
+      }
+      return false;
+    } else {
+      field.removeClass("error");
+      field.next(".error-message").remove();
+      return true;
+    }
+  }
+
+  function validatePasswordMatch(confirmField, passwordField) {
+    if (confirmField.val() === "") {
+      return confirmField.prop("required") ? validateRequiredField(confirmField) : true;
+    }
+
+    if (confirmField.val() !== passwordField.val()) {
+      confirmField.addClass("error");
+      if (!confirmField.next(".error-message").length) {
+        confirmField.after(
+          '<span class="error-message">' + wc_optima_validation.password_match + "</span>",
+        );
+      }
+      return false;
+    } else {
+      confirmField.removeClass("error");
+      confirmField.next(".error-message").remove();
+      return true;
+    }
+  }
+
+  function validateTermsCheckbox(field) {
+    if (!field.is(":checked")) {
+      field.parent().addClass("error");
+      if (!field.parent().next(".error-message").length) {
+        field
+          .parent()
+          .after('<span class="error-message">' + wc_optima_validation.required + "</span>");
+      }
+      return false;
+    } else {
+      field.parent().removeClass("error");
+      field.parent().next(".error-message").remove();
+      return true;
+    }
+  }
+
+  function validateNIP(field) {
+    if (field.val() === "") {
+      return field.prop("required") ? validateRequiredField(field) : true;
+    }
+
+    if (!isValidNIP(field.val())) {
+      field.addClass("error");
+      if (!field.next(".error-message").length) {
+        field.after('<span class="error-message">' + wc_optima_validation.nip_format + "</span>");
+      }
+      return false;
+    } else {
+      field.removeClass("error");
+      field.next(".error-message").remove();
+      return true;
+    }
+  }
+
+  function validateREGON(field) {
+    if (field.val() === "") {
+      return true; // REGON is optional
+    }
+
+    if (!isValidREGON(field.val())) {
+      field.addClass("error");
+      if (!field.next(".error-message").length) {
+        field.after('<span class="error-message">' + wc_optima_validation.regon_format + "</span>");
+      }
+      return false;
+    } else {
+      field.removeClass("error");
+      field.next(".error-message").remove();
+      return true;
+    }
   }
 
   // Helper functions
@@ -469,3 +546,4 @@ jQuery(document).ready(function ($) {
     }
   }
 });
+
