@@ -2,7 +2,7 @@
 
 /**
  * B2C Registration handling class for Optima WooCommerce integration
- * 
+ *
  * @package Optima_WooCommerce
  */
 
@@ -81,7 +81,9 @@ class WC_Optima_B2C_Registration extends WC_Optima_Registration
             'last_name' => __('Nazwisko', 'optima-woocommerce'),
             'email' => __('Adres e-mail', 'optima-woocommerce'),
             'password' => __('Hasło', 'optima-woocommerce'),
-            'password_confirm' => __('Potwierdzenie hasła', 'optima-woocommerce')
+            'password_confirm' => __('Potwierdzenie hasła', 'optima-woocommerce'),
+            'consent_data' => __('Zgoda na przetwarzanie danych osobowych', 'optima-woocommerce'),
+            'consent_invoice' => __('Zgoda na przesyłanie faktur drogą elektroniczną', 'optima-woocommerce')
         );
 
         foreach ($required_fields as $field => $label) {
@@ -142,6 +144,17 @@ class WC_Optima_B2C_Registration extends WC_Optima_Registration
 
         if (is_wp_error($user_id)) {
             return $user_id;
+        }
+
+        // Save consent data
+        update_user_meta($user_id, '_optima_consent_data', 'yes');
+        update_user_meta($user_id, '_optima_consent_invoice', 'yes');
+
+        // Save marketing consent if provided
+        if (!empty($form_data['consent_marketing'])) {
+            update_user_meta($user_id, '_optima_consent_marketing', 'yes');
+        } else {
+            update_user_meta($user_id, '_optima_consent_marketing', 'no');
         }
 
         // Log the user in
@@ -242,10 +255,37 @@ class WC_Optima_B2C_Registration extends WC_Optima_Registration
                 </div>
 
                 <div class="form-row">
-                    <div class="form-group">
+                    <div class="form-group rules">
                         <label class="checkbox">
                             <input type="checkbox" name="terms" id="terms" required>
                             <?php _e('Zapoznałem się i akceptuję <a href="/regulamin/" target="_blank">regulamin</a> oraz <a href="/polityka-prywatnosci/" target="_blank">politykę prywatności</a>.', 'optima-woocommerce'); ?> <span class="required">*</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group rules">
+                        <label class="checkbox">
+                            <input type="checkbox" name="consent_data" id="consent_data" required>
+                            <?php _e('Wyrażam zgodę na przetwarzanie moich danych osobowych w celu założenia i prowadzenia mojego konta użytkownika. Podstawą prawną jest art. 6 ust. 1 lit. b RODO. Zapoznałem/zapoznałam się z <a href="/polityka-prywatnosci/" target="_blank">Polityką prywatności</a>.', 'optima-woocommerce'); ?> <span class="required">*</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group rules">
+                        <label class="checkbox">
+                            <input type="checkbox" name="consent_marketing" id="consent_marketing">
+                            <?php _e('Wyrażam dobrowolną zgodę na otrzymywanie informacji handlowych (newsletter, oferty specjalne, nowości produktowe) drogą elektroniczną (e-mail). Zgodę można w każdej chwili wycofać bez podawania przyczyny, kontaktując się mailowo.', 'optima-woocommerce'); ?>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group rules">
+                        <label class="checkbox">
+                            <input type="checkbox" name="consent_invoice" id="consent_invoice" required>
+                            <?php _e('Wyrażam zgodę na przesyłanie faktur VAT drogą elektroniczną na podany przeze mnie adres e-mail, w formacie PDF. Jestem świadomy/świadoma, że faktury elektroniczne mają taką samą moc prawną jak wersje papierowe.', 'optima-woocommerce'); ?> <span class="required">*</span>
                         </label>
                     </div>
                 </div>

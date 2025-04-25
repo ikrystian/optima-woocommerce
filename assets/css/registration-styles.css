@@ -273,3 +273,12 @@ input.verified-field {
   }
 }
 
+.rules {
+  font-size: 12px;
+  margin-bottom: 0;
+
+  .checkbox {
+    margin-bottom: 0;
+  }
+}
+

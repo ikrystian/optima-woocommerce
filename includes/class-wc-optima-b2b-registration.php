@@ -2,7 +2,7 @@
 
 /**
  * B2B Registration handling class for Optima WooCommerce integration
- * 
+ *
  * @package Optima_WooCommerce
  */
 
@@ -103,7 +103,9 @@ class WC_Optima_B2B_Registration extends WC_Optima_Registration
             'postcode' => __('Kod pocztowy', 'optima-woocommerce'),
             'city' => __('Miasto', 'optima-woocommerce'),
             'password' => __('Hasło', 'optima-woocommerce'),
-            'password_confirm' => __('Potwierdzenie hasła', 'optima-woocommerce')
+            'password_confirm' => __('Potwierdzenie hasła', 'optima-woocommerce'),
+            'consent_data' => __('Zgoda na przetwarzanie danych osobowych', 'optima-woocommerce'),
+            'consent_invoice' => __('Zgoda na przesyłanie faktur drogą elektroniczną', 'optima-woocommerce')
         );
 
         foreach ($required_fields as $field => $label) {
@@ -168,6 +170,17 @@ class WC_Optima_B2B_Registration extends WC_Optima_Registration
 
         // Set billing company
         update_user_meta($user_id, 'billing_company', sanitize_text_field($form_data['company_name']));
+
+        // Save consent data
+        update_user_meta($user_id, '_optima_consent_data', 'yes');
+        update_user_meta($user_id, '_optima_consent_invoice', 'yes');
+
+        // Save marketing consent if provided
+        if (!empty($form_data['consent_marketing'])) {
+            update_user_meta($user_id, '_optima_consent_marketing', 'yes');
+        } else {
+            update_user_meta($user_id, '_optima_consent_marketing', 'no');
+        }
 
         // Log the user in
         wp_set_auth_cookie($user_id, true);
@@ -303,7 +316,7 @@ class WC_Optima_B2B_Registration extends WC_Optima_Registration
                 </div>
 
                 <div class="form-row">
-                    <div class="form-group">
+                    <div class="form-group rules">
                         <label class="checkbox">
                             <input type="checkbox" name="terms" id="terms" required>
                             <?php _e('Zapoznałem się i akceptuję <a href="/regulamin/" target="_blank">regulamin</a> oraz <a href="/polityka-prywatnosci/" target="_blank">politykę prywatności</a>.', 'optima-woocommerce'); ?> <span class="required">*</span>
@@ -312,15 +325,35 @@ class WC_Optima_B2B_Registration extends WC_Optima_Registration
                 </div>
 
                 <div class="form-row">
+                    <div class="form-group rules">
+                        <label class="checkbox">
+                            <input type="checkbox" name="consent_data" id="consent_data" required>
+                            <?php _e('Wyrażam zgodę na przetwarzanie moich danych osobowych w celu założenia i prowadzenia mojego konta użytkownika. Podstawą prawną jest art. 6 ust. 1 lit. b RODO. Zapoznałem/zapoznałam się z <a href="/polityka-prywatnosci/" target="_blank">Polityką prywatności</a>.', 'optima-woocommerce'); ?> <span class="required">*</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group rules">
+                        <label class="checkbox">
+                            <input type="checkbox" name="consent_marketing" id="consent_marketing">
+                            <?php _e('Wyrażam dobrowolną zgodę na otrzymywanie informacji handlowych (newsletter, oferty specjalne, nowości produktowe) drogą elektroniczną (e-mail). Zgodę można w każdej chwili wycofać bez podawania przyczyny, kontaktując się mailowo.', 'optima-woocommerce'); ?>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-row rules">
                     <div class="form-group">
-                        <button type="submit" name="wc_optima_b2b_register" class="button" value="register"><?php _e('Zarejestruj się', 'optima-woocommerce'); ?></button>
+                        <label class="checkbox">
+                            <input type="checkbox" name="consent_invoice" id="consent_invoice" required>
+                            <?php _e('Wyrażam zgodę na przesyłanie faktur VAT drogą elektroniczną na podany przeze mnie adres e-mail, w formacie PDF. Jestem świadomy/świadoma, że faktury elektroniczne mają taką samą moc prawną jak wersje papierowe.', 'optima-woocommerce'); ?> <span class="required">*</span>
+                        </label>
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div class="form-group">
-                        <p><?php _e('Masz już konto?', 'optima-woocommerce'); ?> <a href="<?php echo esc_url(wc_get_page_permalink('myaccount')); ?>"><?php _e('Zaloguj się', 'optima-woocommerce'); ?></a></p>
-                        <p><?php _e('Jesteś klientem indywidualnym?', 'optima-woocommerce'); ?> <a href="<?php echo esc_url(add_query_arg('type', 'b2c', remove_query_arg('type'))); ?>"><?php _e('Zarejestruj konto indywidualne', 'optima-woocommerce'); ?></a></p>
+                        <button type="submit" name="wc_optima_b2b_register" class="button" value="register"><?php _e('Zarejestruj się', 'optima-woocommerce'); ?></button>
                     </div>
                 </div>
             </form>

@@ -82,6 +82,11 @@ jQuery(document).ready(function ($) {
       validateTermsCheckbox($(this));
     });
 
+    // Required consent checkboxes validation on change
+    $("#consent_data, #consent_invoice").on("change", function () {
+      validateTermsCheckbox($(this));
+    });
+
     // Form submission validation (fallback)
     b2cForm.on("submit", function (e) {
       var isValid = true;
@@ -112,6 +117,14 @@ jQuery(document).ready(function ($) {
 
       // Validate terms checkbox
       if (!validateTermsCheckbox($("#terms"))) {
+        isValid = false;
+      }
+
+      // Validate required consent checkboxes
+      if (!validateTermsCheckbox($("#consent_data"))) {
+        isValid = false;
+      }
+      if (!validateTermsCheckbox($("#consent_invoice"))) {
         isValid = false;
       }
 
@@ -158,6 +171,11 @@ jQuery(document).ready(function ($) {
 
     // Terms checkbox validation on change
     $("#terms").on("change", function () {
+      validateTermsCheckbox($(this));
+    });
+
+    // Required consent checkboxes validation on change
+    $("#consent_data, #consent_invoice").on("change", function () {
       validateTermsCheckbox($(this));
     });
 
@@ -336,6 +354,14 @@ jQuery(document).ready(function ($) {
 
       // Validate terms checkbox
       if (!validateTermsCheckbox($("#terms"))) {
+        isValid = false;
+      }
+
+      // Validate required consent checkboxes
+      if (!validateTermsCheckbox($("#consent_data"))) {
+        isValid = false;
+      }
+      if (!validateTermsCheckbox($("#consent_invoice"))) {
         isValid = false;
       }
 
