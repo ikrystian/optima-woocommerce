@@ -182,10 +182,10 @@ class WC_Optima_Order_Completed
         }
 
         $order_data = [
-            'type' => 302, // RO document type
+            'type' => 301, // Document type according to API sample (301 instead of 302)
             'foreignNumber' => 'WC_' . $order->get_order_number(),
-            'calculatedOn' => 1, // 1 = gross, 2 = net
-            'paymentMethod' => 'przelew', // Fixed payment method that is known to work with Optima
+            'calculatedOn' => 2, // 2 = net (changed from 1 = gross to match sample)
+            'paymentMethod' => 'gotówka', // Changed to match sample
             'currency' => $order->get_currency(),
             'elements' => [],
             'description' => sprintf(__('Zamówienie #%s z WooCommerce', 'optima-woocommerce'), $order->get_order_number()),
@@ -194,10 +194,20 @@ class WC_Optima_Order_Completed
             'documentSaleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
             'documentIssueDate' => date('Y-m-d\TH:i:s'),
             'documentPaymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
-            'symbol' => 'RO',
-            'series' => 'WC',
+            'symbol' => 'FA', // Changed to match sample
+            'series' => '-', // Changed to match sample
             'payer' => $payer_recipient,
-            'recipient' => $payer_recipient
+            'recipient' => $payer_recipient,
+            // Additional fields from sample
+            'attributes' => [],
+            'amountPaid' => 0,
+            'amountToPay' => 0,
+            'checkIfExists' => false,
+            'state' => 0,
+            'category' => '',
+            'internalReservation' => 0,
+            'transactionType' => 0,
+            'activeVatVies' => 0
         ];
 
         // Add customer data if available
@@ -269,17 +279,27 @@ class WC_Optima_Order_Completed
             // Calculate price correctly
             $price = $item->get_total() / $item->get_quantity(); // Net price per unit
 
-            // Create element with all required fields for Optima
+            // Create element with all required fields for Optima according to sample
             $element = [
-                'productId' => $optima_id,
+                'itemId' => $optima_id, // Changed from productId to itemId
                 'code' => $optima_code, // Use the Optima code field
+                'name' => null, // Added from sample
+                'manufacturerCode' => '', // Added from sample
+                'unitNetPrice' => $price, // Added from sample
+                'unitGrossPrice' => $price * (1 + ($optima_vat_rate / 100)), // Added from sample
+                'totalNetValue' => $price * $item->get_quantity(), // Added from sample
+                'totalGrossValue' => $price * $item->get_quantity() * (1 + ($optima_vat_rate / 100)), // Added from sample
                 'quantity' => $item->get_quantity(),
-                'price' => $price,
                 'vatRate' => $optima_vat_rate,
-                'discount' => 0,
-                'description' => $item->get_name(),
-                'unit' => !empty($unit) ? $unit : 'szt', // Default to 'szt' if not set
-                'warehouseId' => 1 // Default warehouse ID
+                'setCustomValue' => true, // Added from sample
+                'currentQuantity' => 0, // Added from sample
+                'unit' => !empty($unit) ? strtoupper($unit) : 'SZT', // Default to 'SZT' if not set (uppercase)
+                'purchaseAmount' => 0, // Added from sample
+                'attributes' => [], // Added from sample
+                'category' => 'MAT. PODSTAWOWE', // Added from sample
+                'description' => $item->get_name(), // Keep description
+                'discount' => 0, // Keep discount
+                'warehouseId' => 1 // Keep warehouse ID
             ];
 
             // Add optional fields if available
@@ -372,41 +392,139 @@ class WC_Optima_Order_Completed
             return false;
         }
 
-        // Create a new invoice data structure based on the RO document
+        // Get payment method mapping
+        $payment_method = $order->get_payment_method();
+        $payment_method_name = $order->get_payment_method_title();
+        $optima_payment_method = $this->get_optima_payment_method($payment_method);
+
+        // Get shipping information
+        $shipping_method = $order->get_shipping_method();
+        $shipping_total = $order->get_shipping_total();
+        $shipping_tax = $order->get_shipping_tax();
+
+        // Get order dates
+        $order_date = $order->get_date_created()->date('Y-m-d\TH:i:s');
+        $payment_date = $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days'));
+        $issue_date = date('Y-m-d\TH:i:s');
+
+        // Get order totals
+        $order_total = $order->get_total();
+        $order_tax = $order->get_total_tax();
+        $order_discount = $order->get_total_discount();
+
+        // Get customer information
+        $customer_id = $order->get_customer_id();
+        $customer_note = $order->get_customer_note();
+        $billing_company = $order->get_billing_company();
+        $billing_first_name = $order->get_billing_first_name();
+        $billing_last_name = $order->get_billing_last_name();
+        $billing_address_1 = $order->get_billing_address_1();
+        $billing_address_2 = $order->get_billing_address_2();
+        $billing_city = $order->get_billing_city();
+        $billing_postcode = $order->get_billing_postcode();
+        $billing_country = $order->get_billing_country();
+        $billing_state = $order->get_billing_state();
+        $billing_email = $order->get_billing_email();
+        $billing_phone = $order->get_billing_phone();
+        $vat_number = $order->get_meta('_billing_vat', true);
+
+        // Prepare customer name
+        $customer_name = !empty($billing_company) ? $billing_company : trim($billing_first_name . ' ' . $billing_last_name);
+
+        // Prepare full address
+        $address_parts = array_filter([
+            $billing_address_1,
+            $billing_address_2,
+            $billing_postcode . ' ' . $billing_city,
+            $billing_state,
+            WC()->countries->countries[$billing_country] ?? $billing_country
+        ]);
+        $full_address = implode(', ', $address_parts);
+
+        // Create a comprehensive invoice data structure based on the RO document and sample
         $invoice_data = [
-            // Basic invoice information
-            'type' => 302, // Invoice document type (302 is the type for invoice)
+            // Document type and identification
+            'type' => 301, // Invoice document type (changed to 301 to match sample)
+            'documentTypeId' => 301, // Invoice document type ID (changed to match type)
+            'documentTypeName' => 'Faktura VAT', // Default document type name
             'status' => 1,  // Status 1 means active/normal
             'foreignNumber' => 'WC_' . $order->get_order_number(),
-            'calculatedOn' => 1, // 1 = gross, 2 = net
-            'paymentMethod' => isset($document['paymentMethod']) ? $document['paymentMethod'] : 'przelew',
-            'paymentMethodId' => isset($document['paymentMethodId']) ? $document['paymentMethodId'] : null,
-            'paymentMethodName' => isset($document['paymentMethodName']) ? $document['paymentMethodName'] : 'Przelew',
+            'symbol' => 'FA', // Invoice symbol (changed to match sample)
+            'series' => '-', // Series (changed to match sample)
+            'number' => null, // Added from sample
+
+            // Calculation and financial information
+            'calculatedOn' => 2, // 2 = net (changed to match sample)
             'currency' => $order->get_currency(),
+            'exchangeRate' => $order->get_currency() === 'PLN' ? 1 : null, // Set exchange rate if needed
+            'discount' => isset($document['discount']) ? $document['discount'] : $order_discount,
+            'paid' => $order->is_paid(),
+            'canceled' => false,
+
+            // Payment information
+            'paymentMethod' => isset($document['paymentMethod']) ? $document['paymentMethod'] : 'gotówka', // Changed to match sample
+            'paymentMethodId' => isset($document['paymentMethodId']) ? $document['paymentMethodId'] : null,
+            'paymentMethodName' => isset($document['paymentMethodName']) ? $document['paymentMethodName'] : null,
+
+            // Dates
+            'documentIssueDate' => $issue_date,
+            'documentSaleDate' => $order_date,
+            'documentPaymentDate' => $payment_date,
+            'issueDate' => $issue_date,
+            'saleDate' => $order_date,
+            'paymentDate' => $payment_date,
+            'documentReservationDate' => '0001-01-01T00:00:00', // Added from sample
+            'documentCorrectionDate' => '0001-01-01T00:00:00', // Added from sample
+            'documentReceptionDate' => '0001-01-01T00:00:00', // Added from sample
+            'documentReceiptDate' => '0001-01-01T00:00:00', // Added from sample
+            'documentDeliveryDate' => '0001-01-01T00:00:00', // Added from sample
+            'documentPurchaseDate' => '0001-01-01T00:00:00', // Added from sample
+            'documentReleaseDate' => '0001-01-01T00:00:00', // Added from sample
+
+            // Warehouse information
+            'sourceWarehouseId' => isset($document['sourceWarehouseId']) ? $document['sourceWarehouseId'] : 1,
+            'targetWarehouseId' => 0, // Added from sample
+
+            // Description and notes
             'description' => sprintf(
                 __('Faktura do zamówienia #%s z WooCommerce (RO: %s)', 'optima-woocommerce'),
                 $order->get_order_number(),
                 $ro_document_id
             ),
-            'discount' => isset($document['discount']) ? $document['discount'] : 0,
-            'documentTypeId' => 302, // Invoice document type ID
-            'documentTypeName' => 'Faktura VAT', // Default document type name
-            'paid' => $order->is_paid(),
-            'canceled' => false,
+            'notes' => !empty($customer_note) ? $customer_note : null,
 
-            // Document dates
-            'documentIssueDate' => date('Y-m-d\TH:i:s'),
-            'saleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
-            'paymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
-            // Ensure we have both naming conventions for dates
-            'documentSaleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
-            'documentPaymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
-
-            // Warehouse information
-            'SourceWareHouseId' => isset($document['SourceWareHouseId']) ? $document['SourceWareHouseId'] : 1,
+            // Customer information
+            'customerName' => $customer_name,
+            'customerNip' => !empty($vat_number) ? $vat_number : null,
+            'customerAddress' => $full_address,
+            'customerEmail' => $billing_email,
+            'customerPhone' => $billing_phone,
 
             // VAT Registration Country
-            'vatRegistrationCountry' => isset($document['vatRegistrationCountry']) ? $document['vatRegistrationCountry'] : 'PL',
+            'vatRegistrationCountry' => isset($document['vatRegistrationCountry']) ? $document['vatRegistrationCountry'] : ($billing_country ?: 'PL'),
+
+            // Totals
+            'totalNet' => $order->get_total() - $order_tax,
+            'totalGross' => $order->get_total(),
+            'totalVat' => $order_tax,
+
+            // Reference to original document
+            'originalDocumentId' => $ro_document_id,
+            'originalDocumentNumber' => isset($document['fullNumber']) ? $document['fullNumber'] : null,
+
+            // Additional fields from sample
+            'amountPaid' => 0,
+            'amountToPay' => 0,
+            'checkIfExists' => false,
+            'state' => 0,
+            'category' => '',
+            'internalReservation' => 0,
+            'transactionType' => 0,
+            'activeVatVies' => 0,
+            'attributes' => [],
+
+            // Empty elements array to be filled with products
+            'elements' => [],
         ];
 
         // Customer information - copy from RO document
@@ -421,10 +539,51 @@ class WC_Optima_Order_Completed
             if (isset($document['payer']['vatNumber'])) {
                 $invoice_data['customerNip'] = $document['payer']['vatNumber'];
             }
+
+            // Add defaultPayer based on payer data (from sample)
+            $invoice_data['defaultPayer'] = [
+                'type' => 3,
+                'code' => isset($document['payer']['code']) ? $document['payer']['code'] : 'KA',
+                'name1' => isset($document['payer']['name1']) ? $document['payer']['name1'] : 'Klient',
+                'name2' => '',
+                'name3' => '',
+                'vatNumber' => isset($document['payer']['vatNumber']) ? $document['payer']['vatNumber'] : '',
+                'country' => isset($document['payer']['country']) ? $document['payer']['country'] : '',
+                'city' => isset($document['payer']['city']) ? $document['payer']['city'] : '',
+                'street' => isset($document['payer']['street']) ? $document['payer']['street'] : '',
+                'postCode' => isset($document['payer']['postCode']) ? $document['payer']['postCode'] : '',
+                'houseNumber' => '',
+                'flatNumber' => '',
+                'phone1' => isset($document['payer']['phone']) ? $document['payer']['phone'] : '',
+                'phone2' => '',
+                'inactive' => 0,
+                'defaultPrice' => 0,
+                'regon' => '',
+                'email' => isset($document['payer']['email']) ? $document['payer']['email'] : '',
+                'paymentMethod' => 'gotówka',
+                'dateOfPayment' => 0,
+                'maxPaymentDelay' => 0,
+                'created' => date('Y-m-d\TH:i:s', strtotime('-1 year')),
+                'updated' => date('Y-m-d\TH:i:s'),
+                'description' => '',
+                'countryCode' => '',
+                'countryIso' => '',
+                'group' => '',
+                'purchaseCategory' => ''
+            ];
         } elseif (isset($document['payerId'])) {
             // If we have a payer ID but not payer details, create a minimal payer object
             $invoice_data['payer'] = [
                 'code' => $document['payerId']
+            ];
+
+            // Add minimal defaultPayer
+            $invoice_data['defaultPayer'] = [
+                'type' => 3,
+                'code' => 'KA',
+                'name1' => 'Klient',
+                'vatNumber' => '',
+                'paymentMethod' => 'gotówka'
             ];
         }
 
@@ -454,30 +613,56 @@ class WC_Optima_Order_Completed
 
             // Process each product from the RO document
             foreach ($document['elements'] as $element) {
-                // Create a new element with all required fields for invoice
+                // Calculate totals for the element
+                $quantity = isset($element['quantity']) ? $element['quantity'] : 0;
+                $price = isset($element['price']) ? $element['price'] : 0;
+                $vat_rate = isset($element['vatRate']) ? $element['vatRate'] : 23;
+                $discount = isset($element['discount']) ? $element['discount'] : 0;
+
+                // Calculate net and gross totals
+                $discount_multiplier = (100 - $discount) / 100;
+                $total_net = $quantity * $price * $discount_multiplier;
+                $total_vat = $total_net * ($vat_rate / 100);
+                $total_gross = $total_net + $total_vat;
+
+                // Create a comprehensive element with all fields for invoice according to sample
                 $invoice_element = [
-                    'productId' => isset($element['productId']) ? $element['productId'] : null,
+                    // Product identification according to sample
+                    'id' => isset($element['id']) ? $element['id'] : null,
+                    'itemId' => isset($element['itemId']) ? $element['itemId'] : (isset($element['productId']) ? $element['productId'] : null),
                     'code' => isset($element['code']) ? $element['code'] : '',
-                    'quantity' => isset($element['quantity']) ? $element['quantity'] : 0,
-                    'price' => isset($element['price']) ? $element['price'] : 0,
-                    'vatRate' => isset($element['vatRate']) ? $element['vatRate'] : 23, // Default VAT rate
-                    'discount' => isset($element['discount']) ? $element['discount'] : 0,
+                    'name' => isset($element['name']) ? $element['name'] : null,
+                    'manufacturerCode' => isset($element['manufacturerCode']) ? $element['manufacturerCode'] : '',
+
+                    // Pricing according to sample
+                    'unitNetPrice' => $price,
+                    'unitGrossPrice' => $price * (1 + ($vat_rate / 100)),
+                    'totalNetValue' => $total_net,
+                    'totalGrossValue' => $total_gross,
+                    'quantity' => $quantity,
+                    'vatRate' => $vat_rate,
+                    'setCustomValue' => isset($element['setCustomValue']) ? $element['setCustomValue'] : true,
+                    'currentQuantity' => isset($element['currentQuantity']) ? $element['currentQuantity'] : 0,
+
+                    // Product details according to sample
+                    'unit' => isset($element['unit']) ? strtoupper($element['unit']) : 'SZT', // Default to 'SZT' if not set (uppercase)
+                    'purchaseAmount' => isset($element['purchaseAmount']) ? $element['purchaseAmount'] : 0,
+                    'attributes' => isset($element['attributes']) ? $element['attributes'] : [],
+                    'category' => isset($element['category']) ? $element['category'] : 'MAT. PODSTAWOWE',
+
+                    // Keep additional fields from original implementation
                     'description' => isset($element['description']) ? $element['description'] : '',
-                    'unit' => isset($element['unit']) ? $element['unit'] : 'szt', // Default unit
+                    'discount' => $discount,
+                    'discountAmount' => $quantity * $price * ($discount / 100),
+                    'totalVat' => $total_vat,
+                    'warehouseId' => isset($element['warehouseId']) ? $element['warehouseId'] : 1,
+                    'pkwiu' => isset($element['pkwiu']) ? $element['pkwiu'] : null,
+                    'currency' => isset($element['currency']) ? $element['currency'] : null,
+                    'exchangeRate' => isset($element['exchangeRate']) ? $element['exchangeRate'] : null,
+                    'position' => isset($element['position']) ? $element['position'] : null,
+                    'isService' => isset($element['isService']) ? $element['isService'] : false,
+                    'isExported' => isset($element['isExported']) ? $element['isExported'] : false
                 ];
-
-                // Add additional fields if they exist in the original element
-                if (isset($element['warehouseId'])) {
-                    $invoice_element['warehouseId'] = $element['warehouseId'];
-                }
-
-                if (isset($element['pkwiu'])) {
-                    $invoice_element['pkwiu'] = $element['pkwiu'];
-                }
-
-                if (isset($element['currency'])) {
-                    $invoice_element['currency'] = $element['currency'];
-                }
 
                 // Add the element to the invoice
                 $invoice_data['elements'][] = $invoice_element;
