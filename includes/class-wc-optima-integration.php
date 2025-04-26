@@ -107,6 +107,13 @@ class WC_Optima_Integration
      */
     private $invoice_history;
 
+    /**
+     * Instance of the product fields handler
+     *
+     * @var WC_Optima_Product_Fields
+     */
+    private $product_fields;
+
 
     /**
      * Plugin options
@@ -213,6 +220,9 @@ class WC_Optima_Integration
 
         // Load Invoice History class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-invoice-history.php';
+
+        // Load Product Fields class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-product-fields.php';
     }
 
     /**
@@ -239,7 +249,7 @@ class WC_Optima_Integration
         $this->invoice = new WC_Optima_Invoice(self::$api);
 
         // Initialize AJAX handler
-        $this->ajax = new WC_Optima_AJAX($this->gus_api);
+        $this->ajax = new WC_Optima_AJAX($this->gus_api, self::$api);
 
         // Initialize Registration handlers
         $this->b2c_registration = new WC_Optima_B2C_Registration($this->options, $this->gus_api);
@@ -256,6 +266,9 @@ class WC_Optima_Integration
 
         // Initialize Invoice History handler
         $this->invoice_history = new WC_Optima_Invoice_History($this->options);
+
+        // Initialize Product Fields handler
+        $this->product_fields = new WC_Optima_Product_Fields(self::$api);
     }
 
     /**

@@ -224,7 +224,32 @@ class WC_Optima_Order_Completed
 
             // Skip products without Optima ID
             if (empty($optima_id)) {
+                error_log(sprintf(
+                    __('Integracja WC Optima: Produkt bez ID Optima w zamówieniu %s: %s (ID: %s)', 'optima-woocommerce'),
+                    $order_id,
+                    $item->get_name(),
+                    $product_id
+                ));
                 continue;
+            }
+
+            // Validate required product data
+            $validation_errors = [];
+
+            if (empty($optima_vat_rate)) {
+                $validation_errors[] = sprintf(
+                    __('Brak stawki VAT dla produktu %s (ID: %s)', 'optima-woocommerce'),
+                    $item->get_name(),
+                    $product_id
+                );
+            }
+
+            if (!empty($validation_errors)) {
+                error_log(sprintf(
+                    __('Integracja WC Optima: Błędy walidacji produktu w zamówieniu %s: %s', 'optima-woocommerce'),
+                    $order_id,
+                    implode(', ', $validation_errors)
+                ));
             }
 
             // Get Optima code from meta or fall back to SKU or generate a code based on product ID
@@ -237,15 +262,35 @@ class WC_Optima_Order_Completed
                 }
             }
 
+            // Get additional product data
+            $unit = get_post_meta($product_id, '_optima_unit', true);
+            $pkwiu = get_post_meta($product_id, '_optima_pkwiu', true);
+
+            // Calculate price correctly
+            $price = $item->get_total() / $item->get_quantity(); // Net price per unit
+
+            // Create element with all required fields for Optima
             $element = [
                 'productId' => $optima_id,
                 'code' => $optima_code, // Use the Optima code field
                 'quantity' => $item->get_quantity(),
-                'price' => $item->get_total() / $item->get_quantity(), // Net price per unit
+                'price' => $price,
                 'vatRate' => $optima_vat_rate,
                 'discount' => 0,
-                'description' => $item->get_name()
+                'description' => $item->get_name(),
+                'unit' => !empty($unit) ? $unit : 'szt', // Default to 'szt' if not set
+                'warehouseId' => 1 // Default warehouse ID
             ];
+
+            // Add optional fields if available
+            if (!empty($pkwiu)) {
+                $element['pkwiu'] = $pkwiu;
+            }
+
+            // Add currency if different from default
+            if ($order->get_currency() !== 'PLN') {
+                $element['currency'] = $order->get_currency();
+            }
 
             $order_data['elements'][] = $element;
         }
@@ -336,6 +381,7 @@ class WC_Optima_Order_Completed
             'calculatedOn' => 1, // 1 = gross, 2 = net
             'paymentMethod' => isset($document['paymentMethod']) ? $document['paymentMethod'] : 'przelew',
             'paymentMethodId' => isset($document['paymentMethodId']) ? $document['paymentMethodId'] : null,
+            'paymentMethodName' => isset($document['paymentMethodName']) ? $document['paymentMethodName'] : 'Przelew',
             'currency' => $order->get_currency(),
             'description' => sprintf(
                 __('Faktura do zamówienia #%s z WooCommerce (RO: %s)', 'optima-woocommerce'),
@@ -344,6 +390,7 @@ class WC_Optima_Order_Completed
             ),
             'discount' => isset($document['discount']) ? $document['discount'] : 0,
             'documentTypeId' => 302, // Invoice document type ID
+            'documentTypeName' => 'Faktura VAT', // Default document type name
             'paid' => $order->is_paid(),
             'canceled' => false,
 
@@ -351,17 +398,29 @@ class WC_Optima_Order_Completed
             'documentIssueDate' => date('Y-m-d\TH:i:s'),
             'saleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
             'paymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
+            // Ensure we have both naming conventions for dates
+            'documentSaleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
+            'documentPaymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
 
             // Warehouse information
             'SourceWareHouseId' => isset($document['SourceWareHouseId']) ? $document['SourceWareHouseId'] : 1,
 
             // VAT Registration Country
-            'vatRegistrationCountry' => 'PL', // Default to Poland, can be overridden if available in document
+            'vatRegistrationCountry' => isset($document['vatRegistrationCountry']) ? $document['vatRegistrationCountry'] : 'PL',
         ];
 
         // Customer information - copy from RO document
         if (isset($document['payer']) && is_array($document['payer'])) {
             $invoice_data['payer'] = $document['payer'];
+
+            // Extract customer name and NIP from payer data
+            if (isset($document['payer']['name1'])) {
+                $invoice_data['customerName'] = $document['payer']['name1'];
+            }
+
+            if (isset($document['payer']['vatNumber'])) {
+                $invoice_data['customerNip'] = $document['payer']['vatNumber'];
+            }
         } elseif (isset($document['payerId'])) {
             // If we have a payer ID but not payer details, create a minimal payer object
             $invoice_data['payer'] = [
@@ -369,11 +428,68 @@ class WC_Optima_Order_Completed
             ];
         }
 
-        // Copy elements (products) from RO document
+        // If customer name or NIP is not set from payer data, try to get it from the order
+        if (!isset($invoice_data['customerName'])) {
+            $company = $order->get_billing_company();
+            $first_name = $order->get_billing_first_name();
+            $last_name = $order->get_billing_last_name();
+
+            if (!empty($company)) {
+                $invoice_data['customerName'] = $company;
+            } else {
+                $invoice_data['customerName'] = trim($first_name . ' ' . $last_name);
+            }
+        }
+
+        if (!isset($invoice_data['customerNip'])) {
+            $vat_number = $order->get_meta('_billing_vat', true);
+            if (!empty($vat_number)) {
+                $invoice_data['customerNip'] = $vat_number;
+            }
+        }
+
+        // Copy and enhance elements (products) from RO document
         if (isset($document['elements']) && is_array($document['elements'])) {
-            $invoice_data['elements'] = $document['elements'];
+            $invoice_data['elements'] = [];
+
+            // Process each product from the RO document
+            foreach ($document['elements'] as $element) {
+                // Create a new element with all required fields for invoice
+                $invoice_element = [
+                    'productId' => isset($element['productId']) ? $element['productId'] : null,
+                    'code' => isset($element['code']) ? $element['code'] : '',
+                    'quantity' => isset($element['quantity']) ? $element['quantity'] : 0,
+                    'price' => isset($element['price']) ? $element['price'] : 0,
+                    'vatRate' => isset($element['vatRate']) ? $element['vatRate'] : 23, // Default VAT rate
+                    'discount' => isset($element['discount']) ? $element['discount'] : 0,
+                    'description' => isset($element['description']) ? $element['description'] : '',
+                    'unit' => isset($element['unit']) ? $element['unit'] : 'szt', // Default unit
+                ];
+
+                // Add additional fields if they exist in the original element
+                if (isset($element['warehouseId'])) {
+                    $invoice_element['warehouseId'] = $element['warehouseId'];
+                }
+
+                if (isset($element['pkwiu'])) {
+                    $invoice_element['pkwiu'] = $element['pkwiu'];
+                }
+
+                if (isset($element['currency'])) {
+                    $invoice_element['currency'] = $element['currency'];
+                }
+
+                // Add the element to the invoice
+                $invoice_data['elements'][] = $invoice_element;
+            }
+
+            // If no elements were added, log a warning
+            if (empty($invoice_data['elements'])) {
+                error_log(sprintf(__('Integracja WC Optima: Brak produktów w dokumencie RO %s dla zamówienia %s', 'optima-woocommerce'), $ro_document_id, $order_id));
+            }
         } else {
             $invoice_data['elements'] = [];
+            error_log(sprintf(__('Integracja WC Optima: Brak elementów w dokumencie RO %s dla zamówienia %s', 'optima-woocommerce'), $ro_document_id, $order_id));
         }
 
         // Copy customer ID if available
@@ -381,12 +497,33 @@ class WC_Optima_Order_Completed
             $invoice_data['payerId'] = $document['payerId'];
         }
 
-        // Copy elements (products) from RO document
-        if (isset($document['elements']) && is_array($document['elements'])) {
-            $invoice_data['elements'] = $document['elements'];
-        } else {
-            $invoice_data['elements'] = [];
+        // Validate invoice data before sending to API
+        $validation_errors = $this->validate_invoice_data($invoice_data, $order_id);
+
+        if (!empty($validation_errors)) {
+            // Add validation errors to order note
+            $order->add_order_note(
+                sprintf(
+                    __('Nie udało się utworzyć faktury w Optima. Błędy walidacji: %s', 'optima-woocommerce'),
+                    implode(', ', $validation_errors)
+                )
+            );
+
+            error_log(sprintf(
+                __('Integracja WC Optima: Błędy walidacji faktury dla zamówienia %s: %s', 'optima-woocommerce'),
+                $order_id,
+                implode(', ', $validation_errors)
+            ));
+
+            return false;
         }
+
+        // Log invoice data for debugging
+        error_log(sprintf(
+            __('Integracja WC Optima: Wysyłanie danych faktury dla zamówienia %s: %s', 'optima-woocommerce'),
+            $order_id,
+            json_encode($invoice_data, JSON_PRETTY_PRINT)
+        ));
 
         // Create the invoice in Optima
         $result = $this->api->create_invoice($invoice_data);
@@ -411,6 +548,13 @@ class WC_Optima_Order_Completed
                 )
             );
 
+            // Log success
+            error_log(sprintf(
+                __('Integracja WC Optima: Pomyślnie utworzono fakturę %s dla zamówienia %s', 'optima-woocommerce'),
+                $result['id'],
+                $order_id
+            ));
+
             return $result['id'];
         } elseif (is_array($result) && isset($result['error']) && $result['error'] === true) {
             // Handle specific error response
@@ -426,13 +570,42 @@ class WC_Optima_Order_Completed
                 )
             );
 
-            error_log(sprintf(__('Integracja WC Optima: Błąd podczas tworzenia faktury dla zamówienia %s: %s', 'optima-woocommerce'), $order_id, $error_message));
+            // Log detailed error information
+            error_log(sprintf(
+                __('Integracja WC Optima: Błąd podczas tworzenia faktury dla zamówienia %s: %s (Kod: %s)', 'optima-woocommerce'),
+                $order_id,
+                $error_message,
+                $status_code
+            ));
+
+            // Log API response if available
+            if (isset($result['optima_response'])) {
+                error_log(sprintf(
+                    __('Integracja WC Optima: Odpowiedź API dla zamówienia %s: %s', 'optima-woocommerce'),
+                    $order_id,
+                    $result['optima_response']
+                ));
+            }
         } else {
             // Generic failure
             $order->add_order_note(
                 __('Nie udało się utworzyć faktury w Optima.', 'optima-woocommerce')
             );
-            error_log(sprintf(__('Integracja WC Optima: Nie udało się utworzyć faktury dla zamówienia %s', 'optima-woocommerce'), $order_id));
+
+            // Log generic error
+            error_log(sprintf(
+                __('Integracja WC Optima: Nie udało się utworzyć faktury dla zamówienia %s. Nieznany błąd.', 'optima-woocommerce'),
+                $order_id
+            ));
+
+            // Log result for debugging
+            if ($result) {
+                error_log(sprintf(
+                    __('Integracja WC Optima: Odpowiedź API dla zamówienia %s: %s', 'optima-woocommerce'),
+                    $order_id,
+                    json_encode($result)
+                ));
+            }
         }
 
         return false;
@@ -554,6 +727,99 @@ Zespół %s', 'optima-woocommerce'),
             error_log(sprintf(__('Integracja WC Optima: Nie udało się wysłać faktury %s dla zamówienia %s na adres %s', 'optima-woocommerce'), $invoice_id, $order_id, $customer_email));
             return false;
         }
+    }
+
+    /**
+     * Validate invoice data before sending to API
+     *
+     * @param array $invoice_data Invoice data to validate
+     * @param int $order_id Order ID for logging purposes
+     * @return array Array of validation errors, empty if no errors
+     */
+    private function validate_invoice_data($invoice_data, $order_id)
+    {
+        $errors = [];
+
+        // Check required fields
+        $required_fields = [
+            'type' => __('Typ dokumentu', 'optima-woocommerce'),
+            'status' => __('Status', 'optima-woocommerce'),
+            'foreignNumber' => __('Numer obcy', 'optima-woocommerce'),
+            'calculatedOn' => __('Sposób kalkulacji', 'optima-woocommerce'),
+            'documentIssueDate' => __('Data wystawienia', 'optima-woocommerce'),
+            'saleDate' => __('Data sprzedaży', 'optima-woocommerce'),
+            'paymentDate' => __('Data płatności', 'optima-woocommerce')
+        ];
+
+        foreach ($required_fields as $field => $label) {
+            if (!isset($invoice_data[$field]) || (is_string($invoice_data[$field]) && empty($invoice_data[$field]))) {
+                $errors[] = sprintf(__('Brak wymaganego pola: %s', 'optima-woocommerce'), $label);
+            }
+        }
+
+        // Check if elements array exists and is not empty
+        if (!isset($invoice_data['elements']) || !is_array($invoice_data['elements']) || empty($invoice_data['elements'])) {
+            $errors[] = __('Brak produktów w fakturze', 'optima-woocommerce');
+        } else {
+            // Validate each element
+            foreach ($invoice_data['elements'] as $index => $element) {
+                $element_errors = $this->validate_invoice_element($element, $index);
+                $errors = array_merge($errors, $element_errors);
+            }
+        }
+
+        // Check if payer exists
+        if (!isset($invoice_data['payer']) || !is_array($invoice_data['payer'])) {
+            $errors[] = __('Brak danych płatnika', 'optima-woocommerce');
+        } else {
+            // Validate payer
+            if (!isset($invoice_data['payer']['code']) || empty($invoice_data['payer']['code'])) {
+                $errors[] = __('Brak kodu płatnika', 'optima-woocommerce');
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate invoice element (product)
+     *
+     * @param array $element Element data to validate
+     * @param int $index Element index for error messages
+     * @return array Array of validation errors, empty if no errors
+     */
+    private function validate_invoice_element($element, $index)
+    {
+        $errors = [];
+
+        // Check required fields
+        $required_fields = [
+            'productId' => __('ID produktu', 'optima-woocommerce'),
+            'quantity' => __('Ilość', 'optima-woocommerce'),
+            'price' => __('Cena', 'optima-woocommerce'),
+            'vatRate' => __('Stawka VAT', 'optima-woocommerce')
+        ];
+
+        foreach ($required_fields as $field => $label) {
+            if (!isset($element[$field]) || (is_string($element[$field]) && empty($element[$field]))) {
+                $errors[] = sprintf(__('Produkt #%d: Brak wymaganego pola: %s', 'optima-woocommerce'), $index + 1, $label);
+            }
+        }
+
+        // Validate numeric fields
+        if (isset($element['quantity']) && (!is_numeric($element['quantity']) || $element['quantity'] <= 0)) {
+            $errors[] = sprintf(__('Produkt #%d: Nieprawidłowa ilość', 'optima-woocommerce'), $index + 1);
+        }
+
+        if (isset($element['price']) && (!is_numeric($element['price']) || $element['price'] < 0)) {
+            $errors[] = sprintf(__('Produkt #%d: Nieprawidłowa cena', 'optima-woocommerce'), $index + 1);
+        }
+
+        if (isset($element['vatRate']) && (!is_numeric($element['vatRate']) || $element['vatRate'] < 0 || $element['vatRate'] > 100)) {
+            $errors[] = sprintf(__('Produkt #%d: Nieprawidłowa stawka VAT', 'optima-woocommerce'), $index + 1);
+        }
+
+        return $errors;
     }
 
     /**
