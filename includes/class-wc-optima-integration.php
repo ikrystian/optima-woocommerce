@@ -93,6 +93,12 @@ class WC_Optima_Integration
      */
     private $account;
 
+    /**
+     * Instance of the order completed handler
+     *
+     * @var WC_Optima_Order_Completed
+     */
+    private $order_completed;
 
 
     /**
@@ -191,6 +197,9 @@ class WC_Optima_Integration
 
         // Load Account class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-account.php';
+
+        // Load Order Completed class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-order-completed.php';
     }
 
     /**
@@ -228,6 +237,9 @@ class WC_Optima_Integration
 
         // Initialize Account handler
         $this->account = new WC_Optima_Account($this->options);
+
+        // Initialize Order Completed handler
+        $this->order_completed = new WC_Optima_Order_Completed(self::$api, $this->invoice);
     }
 
     /**
@@ -425,21 +437,24 @@ class WC_Optima_Integration
             $unit_price = $item->get_total() / $quantity;
             $unit_price_with_tax = $item->get_total_tax() > 0 ? ($item->get_total() + $item->get_total_tax()) / $quantity : $unit_price * (1 + ($optima_vat_rate / 100));
 
-            $element = [
-                'code' => $product->get_sku() ? $product->get_sku() : 'WC_' . $product_id,
-                'manufacturerCode' => '',
-                'unitNetPrice' => round($unit_price, 2),
-                'unitGrossPrice' => round($unit_price_with_tax, 2),
-                'totalNetValue' => round($item->get_total(), 2),
-                'totalGrossValue' => round($item->get_total() + $item->get_total_tax(), 2),
-                'quantity' => $quantity,
-                'vatRate' => floatval($optima_vat_rate),
-                'setCustomValue' => true
-            ];
-
-            // Add itemId if we have an Optima ID
+            // Always use productId approach when available
             if (!empty($optima_id)) {
-                $element['itemId'] = $optima_id;
+                $element = [
+                    'productId' => $optima_id,
+                    'quantity' => $quantity,
+                    'price' => round($unit_price, 2),
+                    'vatRate' => floatval($optima_vat_rate),
+                    'discount' => 0,
+                    'description' => $item->get_name()
+                ];
+            } else {
+                // Skip products without Optima ID
+                error_log(sprintf(
+                    __('Integracja WC Optima: Pomijanie produktu bez ID Optima: %s (SKU: %s)', 'optima-woocommerce'),
+                    $item->get_name(),
+                    $product->get_sku() ? $product->get_sku() : 'brak'
+                ));
+                continue;
             }
 
             $order_data['elements'][] = $element;
@@ -471,11 +486,53 @@ class WC_Optima_Integration
             $status_code = isset($result['status_code']) ? $result['status_code'] : '';
 
             // Add a note to the order with detailed error information
+            $detailed_error = $error_message;
+
+            // Add more details if available
+            if (isset($result['optima_request']) && is_array($result['optima_request'])) {
+                $detailed_error .= "\n\nDane wysłane do Optima:";
+
+                // Add information about elements (products) if available
+                if (isset($result['optima_request']['elements']) && is_array($result['optima_request']['elements'])) {
+                    $detailed_error .= "\nProdukty:";
+                    foreach ($result['optima_request']['elements'] as $idx => $element) {
+                        $product_info = '';
+                        if (isset($element['productId'])) {
+                            $product_info .= " ID: " . $element['productId'];
+                        }
+                        if (isset($element['code'])) {
+                            $product_info .= " Kod: " . $element['code'];
+                        }
+                        if (isset($element['description'])) {
+                            $product_info .= " Nazwa: " . $element['description'];
+                        }
+                        $detailed_error .= "\n- Produkt " . ($idx + 1) . ":" . $product_info;
+                    }
+                }
+            }
+
+            // Add response details if available
+            if (isset($result['optima_response'])) {
+                $response_data = json_decode($result['optima_response'], true);
+                if (is_array($response_data) && isset($response_data['ModelState'])) {
+                    $detailed_error .= "\n\nBłędy walidacji:";
+                    foreach ($response_data['ModelState'] as $field => $errors) {
+                        if (is_array($errors)) {
+                            foreach ($errors as $error) {
+                                $detailed_error .= "\n- " . $field . ": " . $error;
+                            }
+                        } else {
+                            $detailed_error .= "\n- " . $field . ": " . $errors;
+                        }
+                    }
+                }
+            }
+
             $order->add_order_note(
                 sprintf(
                     __('Nie udało się utworzyć dokumentu RO Optima. Błąd %s: %s', 'optima-woocommerce'),
                     $status_code,
-                    $error_message
+                    $detailed_error
                 )
             );
 
@@ -566,11 +623,36 @@ class WC_Optima_Integration
             $status_code = isset($result['status_code']) ? $result['status_code'] : '';
 
             // Add a note to the order with detailed error information
+            $detailed_error = $error_message;
+
+            // Add more details if available
+            if (isset($result['optima_request']) && is_array($result['optima_request'])) {
+                $detailed_error .= "\n\nDane wysłane do Optima:";
+                $detailed_error .= "\n" . json_encode($result['optima_request'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            }
+
+            // Add response details if available
+            if (isset($result['optima_response'])) {
+                $response_data = json_decode($result['optima_response'], true);
+                if (is_array($response_data) && isset($response_data['ModelState'])) {
+                    $detailed_error .= "\n\nBłędy walidacji:";
+                    foreach ($response_data['ModelState'] as $field => $errors) {
+                        if (is_array($errors)) {
+                            foreach ($errors as $error) {
+                                $detailed_error .= "\n- " . $field . ": " . $error;
+                            }
+                        } else {
+                            $detailed_error .= "\n- " . $field . ": " . $errors;
+                        }
+                    }
+                }
+            }
+
             $order->add_order_note(
                 sprintf(
                     __('Nie udało się zaktualizować dokumentu w Optima. Błąd %s: %s', 'optima-woocommerce'),
                     $status_code,
-                    $error_message
+                    $detailed_error
                 )
             );
 

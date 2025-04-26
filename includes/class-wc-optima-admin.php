@@ -406,6 +406,7 @@ class WC_Optima_Admin
                 <a href="?page=wc-optima-integration&tab=sync" class="nav-tab <?php echo $active_tab === 'sync' ? 'nav-tab-active' : ''; ?>"><?php _e('Synchronizacja', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=customers" class="nav-tab <?php echo $active_tab === 'customers' ? 'nav-tab-active' : ''; ?>"><?php _e('Klienci', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=rco" class="nav-tab <?php echo $active_tab === 'rco' ? 'nav-tab-active' : ''; ?>"><?php _e('Dokumenty RO', 'optima-woocommerce'); ?></a>
+                <a href="?page=wc-optima-integration&tab=test" class="nav-tab <?php echo $active_tab === 'test' ? 'nav-tab-active' : ''; ?>"><?php _e('Test Faktury', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>"><?php _e('Ustawienia', 'optima-woocommerce'); ?></a>
             </h2>
 
@@ -562,6 +563,50 @@ class WC_Optima_Admin
                         <div id="wc-optima-invoices-results" style="margin-top: 20px;">
                             <!-- Results will be displayed here -->
                         </div>
+                    <?php endif; ?>
+                </div>
+
+            <?php elseif ($active_tab === 'test'): ?>
+
+                <div class="optima-test-section">
+                    <h2><?php _e('Test Faktury dla Zamówień Zrealizowanych', 'optima-woocommerce'); ?></h2>
+
+                    <?php if (empty($this->options['api_url']) || empty($this->options['username']) || empty($this->options['password'])): ?>
+                        <div class="notice notice-warning">
+                            <p><?php printf(__('Proszę skonfigurować ustawienia API przed testowaniem. Przejdź do zakładki <a href="%s">Ustawienia</a>.', 'optima-woocommerce'), '?page=wc-optima-integration&tab=settings'); ?></p>
+                        </div>
+                    <?php else: ?>
+                        <p><?php _e('Ten formularz pozwala na testowanie funkcjonalności tworzenia faktury w Optima po zmianie statusu zamówienia na "zrealizowane".', 'optima-woocommerce'); ?></p>
+
+                        <form method="get" action="<?php echo admin_url('admin.php'); ?>">
+                            <input type="hidden" name="page" value="wc-optima-integration">
+                            <input type="hidden" name="tab" value="test">
+                            <input type="hidden" name="test_order_completed" value="1">
+
+                            <table class="form-table">
+                                <tr>
+                                    <th scope="row"><label for="order_id"><?php _e('ID Zamówienia', 'optima-woocommerce'); ?></label></th>
+                                    <td>
+                                        <input type="number" name="order_id" id="order_id" class="regular-text" min="1" required>
+                                        <p class="description"><?php _e('Wprowadź ID zamówienia, dla którego chcesz przetestować tworzenie faktury.', 'optima-woocommerce'); ?></p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p class="submit">
+                                <input type="submit" name="submit" id="submit" class="button button-primary" value="<?php _e('Testuj Tworzenie Faktury', 'optima-woocommerce'); ?>">
+                            </p>
+                        </form>
+
+                        <?php
+                        // Check if this is a test request
+                        if (isset($_GET['test_order_completed']) && isset($_GET['order_id'])) {
+                            $order_id = intval($_GET['order_id']);
+
+                            // Include the test script
+                            include_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'test-order-completed.php';
+                        }
+                        ?>
                     <?php endif; ?>
                 </div>
 

@@ -646,6 +646,19 @@ class WC_Optima_API
                         $error_message = $result['message'];
                     } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
                         $error_message = $result['error']['message'];
+                    } elseif (is_array($result) && isset($result['ModelState'])) {
+                        // Extract validation errors from ModelState
+                        $validation_errors = [];
+                        foreach ($result['ModelState'] as $field => $errors) {
+                            if (is_array($errors)) {
+                                foreach ($errors as $error) {
+                                    $validation_errors[] = $field . ': ' . $error;
+                                }
+                            } else {
+                                $validation_errors[] = $field . ': ' . $errors;
+                            }
+                        }
+                        $error_message = 'Validation errors: ' . implode('; ', $validation_errors);
                     } elseif (!empty($body)) {
                         $error_message = $body;
                     } else {
@@ -653,8 +666,13 @@ class WC_Optima_API
                     }
 
                     // Log full request and response for debugging
-                    error_log('Optima RO request payload: ' . json_encode($order_data));
+                    error_log('Optima RO request payload: ' . json_encode($order_data, JSON_PRETTY_PRINT));
                     error_log('Optima RO response body: ' . $body);
+
+                    // Log more detailed information about the error
+                    if (is_array($result)) {
+                        error_log('Optima RO response details: ' . json_encode($result, JSON_PRETTY_PRINT));
+                    }
 
                     error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
 
@@ -677,7 +695,8 @@ class WC_Optima_API
                         'message' => $error_message,
                         'retries' => $retry_count,
                         'optima_request' => $order_data,
-                        'optima_response' => $body
+                        'optima_response' => $body,
+                        'optima_response_parsed' => $result
                     ];
                 } catch (\GuzzleHttp\Exception\ServerException $e) {
                     // Handle 5xx errors (server errors)
@@ -787,11 +806,28 @@ class WC_Optima_API
                 $error_message = $result['message'];
             } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
                 $error_message = $result['error']['message'];
+            } elseif (is_array($result) && isset($result['ModelState'])) {
+                // Extract validation errors from ModelState
+                $validation_errors = [];
+                foreach ($result['ModelState'] as $field => $errors) {
+                    if (is_array($errors)) {
+                        foreach ($errors as $error) {
+                            $validation_errors[] = $field . ': ' . $error;
+                        }
+                    } else {
+                        $validation_errors[] = $field . ': ' . $errors;
+                    }
+                }
+                $error_message = 'Validation errors: ' . implode('; ', $validation_errors);
             } elseif (!empty($body)) {
                 $error_message = $body;
             } else {
                 $error_message = 'Unknown error (Status code: ' . $status_code . ')';
             }
+
+            // Log full request and response for debugging
+            error_log('Optima RO request payload (WP HTTP): ' . json_encode($order_data, JSON_PRETTY_PRINT));
+            error_log('Optima RO response body (WP HTTP): ' . $body);
 
             error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
 
@@ -816,7 +852,10 @@ class WC_Optima_API
                 'error' => true,
                 'status_code' => $status_code,
                 'message' => $error_message,
-                'retries' => $retry_count
+                'retries' => $retry_count,
+                'optima_request' => $order_data,
+                'optima_response' => $body,
+                'optima_response_parsed' => $result
             ];
         }
 
@@ -1270,7 +1309,8 @@ class WC_Optima_API
                         'message' => $error_message,
                         'retries' => $retry_count,
                         'optima_request' => $document_data,
-                        'optima_response' => $body
+                        'optima_response' => $body,
+                        'optima_response_parsed' => $result
                     ];
                 } catch (\GuzzleHttp\Exception\ServerException $e) {
                     // Handle 5xx errors (server errors)
@@ -1382,11 +1422,28 @@ class WC_Optima_API
                 $error_message = $result['message'];
             } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
                 $error_message = $result['error']['message'];
+            } elseif (is_array($result) && isset($result['ModelState'])) {
+                // Extract validation errors from ModelState
+                $validation_errors = [];
+                foreach ($result['ModelState'] as $field => $errors) {
+                    if (is_array($errors)) {
+                        foreach ($errors as $error) {
+                            $validation_errors[] = $field . ': ' . $error;
+                        }
+                    } else {
+                        $validation_errors[] = $field . ': ' . $errors;
+                    }
+                }
+                $error_message = 'Validation errors: ' . implode('; ', $validation_errors);
             } elseif (!empty($body)) {
                 $error_message = $body;
             } else {
                 $error_message = 'Unknown error (Status code: ' . $status_code . ')';
             }
+
+            // Log full request and response for debugging
+            error_log('Optima document update request payload (WP HTTP): ' . json_encode($document_data, JSON_PRETTY_PRINT));
+            error_log('Optima document update response body (WP HTTP): ' . $body);
 
             error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
 
@@ -1411,7 +1468,10 @@ class WC_Optima_API
                 'error' => true,
                 'status_code' => $status_code,
                 'message' => $error_message,
-                'retries' => $retry_count
+                'retries' => $retry_count,
+                'optima_request' => $document_data,
+                'optima_response' => $body,
+                'optima_response_parsed' => $result
             ];
         }
 
