@@ -50,7 +50,7 @@ class WC_Optima_Order_Completed
 
     /**
      * Process completed order
-     * 
+     *
      * When an order is marked as completed:
      * 1. Create an invoice in Optima
      * 2. Add a link to the invoice in the order
@@ -227,8 +227,19 @@ class WC_Optima_Order_Completed
                 continue;
             }
 
+            // Get Optima code from meta or fall back to SKU or generate a code based on product ID
+            $optima_code = get_post_meta($product_id, '_optima_code', true);
+            if (empty($optima_code)) {
+                // Fall back to SKU if _optima_code is not available
+                $optima_code = $product->get_sku();
+                if (empty($optima_code)) {
+                    $optima_code = 'WC_PROD_' . $product_id;
+                }
+            }
+
             $element = [
                 'productId' => $optima_id,
+                'code' => $optima_code, // Use the Optima code field
                 'quantity' => $item->get_quantity(),
                 'price' => $item->get_total() / $item->get_quantity(), // Net price per unit
                 'vatRate' => $optima_vat_rate,
@@ -316,19 +327,64 @@ class WC_Optima_Order_Completed
             return false;
         }
 
-        // Prepare document data for update to invoice
-        $update_data = [
-            'type' => 301, // Invoice document type (301 is the type for invoice)
-            'status' => 2,  // Status 2 means paid
-            'documentPaymentDate' => date('Y-m-d\TH:i:s'), // Current date as payment date
+        // Create a new invoice data structure based on the RO document
+        $invoice_data = [
+            // Basic invoice information
+            'type' => 302, // Invoice document type (302 is the type for invoice)
+            'status' => 1,  // Status 1 means active/normal
+            'foreignNumber' => 'WC_' . $order->get_order_number(),
+            'calculatedOn' => 1, // 1 = gross, 2 = net
+            'paymentMethod' => isset($document['paymentMethod']) ? $document['paymentMethod'] : 'przelew',
+            'currency' => $order->get_currency(),
+            'description' => sprintf(
+                __('Faktura do zamówienia #%s z WooCommerce (RO: %s)', 'optima-woocommerce'),
+                $order->get_order_number(),
+                $ro_document_id
+            ),
+
+            // Document dates
+            'documentIssueDate' => date('Y-m-d\TH:i:s'),
+
+            // Warehouse information
+            'SourceWareHouseId' => isset($document['SourceWareHouseId']) ? $document['SourceWareHouseId'] : 1,
+
         ];
 
-        // Update the document in Optima
-        $result = $this->api->update_document($ro_document_id, $update_data);
+        // Customer information - copy from RO document
+        if (isset($document['payer']) && is_array($document['payer'])) {
+            $invoice_data['payer'] = $document['payer'];
+        } elseif (isset($document['payerId'])) {
+            // If we have a payer ID but not payer details, create a minimal payer object
+            $invoice_data['payer'] = [
+                'code' => $document['payerId']
+            ];
+        }
 
-        if ($result && !isset($result['error'])) {
-            // Store the invoice ID in the order meta (using the same RO document ID)
-            update_post_meta($order_id, 'optima_invoice_id', $ro_document_id);
+        // Copy elements (products) from RO document
+        if (isset($document['elements']) && is_array($document['elements'])) {
+            $invoice_data['elements'] = $document['elements'];
+        } else {
+            $invoice_data['elements'] = [];
+        }
+
+        // Copy customer ID if available
+        if (isset($document['payerId'])) {
+            $invoice_data['payerId'] = $document['payerId'];
+        }
+
+        // Copy elements (products) from RO document
+        if (isset($document['elements']) && is_array($document['elements'])) {
+            $invoice_data['elements'] = $document['elements'];
+        } else {
+            $invoice_data['elements'] = [];
+        }
+
+        // Create the invoice in Optima
+        $result = $this->api->create_invoice($invoice_data);
+
+        if ($result && isset($result['id'])) {
+            // Store the invoice ID in the order meta
+            update_post_meta($order_id, 'optima_invoice_id', $result['id']);
 
             // Store the invoice number if available
             if (isset($result['invoiceNumber'])) {
@@ -340,12 +396,13 @@ class WC_Optima_Order_Completed
             // Add a note to the order
             $order->add_order_note(
                 sprintf(
-                    __('Utworzono fakturę w Optima: %s', 'optima-woocommerce'),
-                    $ro_document_id
+                    __('Utworzono fakturę w Optima: %s (%s)', 'optima-woocommerce'),
+                    $result['id'],
+                    $result['fullNumber'] ?? ''
                 )
             );
 
-            return $ro_document_id;
+            return $result['id'];
         } elseif (is_array($result) && isset($result['error']) && $result['error'] === true) {
             // Handle specific error response
             $error_message = isset($result['message']) ? $result['message'] : __('Nieznany błąd', 'optima-woocommerce');

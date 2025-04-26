@@ -1477,4 +1477,288 @@ class WC_Optima_API
 
         return $result;
     }
+
+    /**
+     * Create invoice in Optima using the Documents API endpoint
+     *
+     * @param array $invoice_data Invoice data in Optima format
+     * @return array|false New invoice data if created, false or error array on failure
+     */
+    public function create_invoice($invoice_data)
+    {
+        $token = $this->get_access_token();
+
+        if (!$token) {
+            error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu do tworzenia faktury', 'optima-woocommerce'));
+            return [
+                'error' => true,
+                'message' => __('Nie udało się uzyskać tokena dostępu do API Optima', 'optima-woocommerce')
+            ];
+        }
+
+        try {
+            // Check if GuzzleHttp exists
+            if (!class_exists('\\GuzzleHttp\\Client')) {
+                // Since Guzzle isn't available, use WordPress HTTP API
+                return $this->create_invoice_with_wp_http($token, $invoice_data);
+            }
+
+            $client = new \GuzzleHttp\Client();
+
+            $options = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json'
+                ],
+                'body' => json_encode($invoice_data)
+            ];
+
+            // Add retry mechanism for Guzzle requests
+            $max_retries = 3; // Maximum number of retry attempts
+            $retry_delay = 2; // Delay between retries in seconds
+            $retry_count = 0;
+
+            while ($retry_count <= $max_retries) {
+                try {
+                    // Log the request payload for debugging
+                    error_log('Optima invoice request payload to Documents API: ' . json_encode($invoice_data, JSON_PRETTY_PRINT));
+
+                    // Make the API request to create an invoice using the Documents endpoint
+                    $response = $client->request('POST', $this->api_url . '/Documents', $options);
+                    $result = json_decode($response->getBody()->getContents(), true);
+                    return $result;
+                } catch (\GuzzleHttp\Exception\ClientException $e) {
+                    // Handle 4xx errors (client errors)
+                    $response = $e->getResponse();
+                    $status_code = $response->getStatusCode();
+                    $body = $response->getBody()->getContents();
+                    $result = json_decode($body, true);
+
+                    $error_message = '';
+                    // Try to extract error message from response
+                    if (is_array($result) && isset($result['Message'])) {
+                        $error_message = $result['Message'];
+                    } elseif (is_array($result) && isset($result['message'])) {
+                        $error_message = $result['message'];
+                    } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
+                        $error_message = $result['error']['message'];
+                    } elseif (is_array($result) && isset($result['ModelState'])) {
+                        // Extract validation errors from ModelState
+                        $validation_errors = [];
+                        foreach ($result['ModelState'] as $field => $errors) {
+                            if (is_array($errors)) {
+                                foreach ($errors as $error) {
+                                    $validation_errors[] = $field . ': ' . $error;
+                                }
+                            } else {
+                                $validation_errors[] = $field . ': ' . $errors;
+                            }
+                        }
+                        $error_message = 'Validation errors: ' . implode('; ', $validation_errors);
+                    } elseif (!empty($body)) {
+                        $error_message = $body;
+                    } else {
+                        $error_message = $e->getMessage();
+                    }
+
+                    // Log full request and response for debugging
+                    error_log('Optima invoice request payload: ' . json_encode($invoice_data, JSON_PRETTY_PRINT));
+                    error_log('Optima Documents API response body: ' . $body);
+
+                    // Log more detailed information about the error
+                    if (is_array($result)) {
+                        error_log('Optima Documents API response details: ' . json_encode($result, JSON_PRETTY_PRINT));
+                    }
+
+                    error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
+
+                    // Client errors (4xx) are usually not worth retrying unless it's a rate limit (429)
+                    if ($status_code == 429 && $retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    return [
+                        'error' => true,
+                        'status_code' => $status_code,
+                        'message' => $error_message,
+                        'retries' => $retry_count,
+                        'optima_request' => $invoice_data,
+                        'optima_response' => $body,
+                        'optima_response_parsed' => $result
+                    ];
+                } catch (\GuzzleHttp\Exception\ServerException $e) {
+                    // Handle 5xx errors (server errors)
+                    error_log(__('Integracja WC Optima: Błąd serwera podczas tworzenia faktury przez Documents API - ', 'optima-woocommerce') . $e->getMessage());
+
+                    // Server errors are good candidates for retry
+                    if ($retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    // Fall back to WordPress HTTP API after exhausting retries
+                    return $this->create_invoice_with_wp_http($token, $invoice_data);
+                } catch (\GuzzleHttp\Exception\ConnectException $e) {
+                    // Handle connection errors
+                    error_log(__('Integracja WC Optima: Błąd połączenia podczas tworzenia faktury przez Documents API - ', 'optima-woocommerce') . $e->getMessage());
+
+                    // Connection errors are good candidates for retry
+                    if ($retry_count < $max_retries) {
+                        $retry_count++;
+                        error_log(sprintf(
+                            __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                            $retry_count,
+                            $max_retries,
+                            $retry_delay
+                        ));
+                        sleep($retry_delay);
+                        continue;
+                    }
+
+                    // Fall back to WordPress HTTP API after exhausting retries
+                    return $this->create_invoice_with_wp_http($token, $invoice_data);
+                }
+            }
+        } catch (Exception $e) {
+            error_log(__('Integracja WC Optima: Błąd podczas tworzenia faktury przez Documents API - ', 'optima-woocommerce') . $e->getMessage());
+            // Fall back to WordPress HTTP API
+            return $this->create_invoice_with_wp_http($token, $invoice_data);
+        }
+    }
+
+    /**
+     * Create invoice using WordPress HTTP API as a fallback
+     * Uses the Documents API endpoint to create an invoice
+     *
+     * @param string $token The access token
+     * @param array $invoice_data Invoice data
+     * @param int $retry_count Number of retries attempted (default 0)
+     * @return array|false New invoice data if created, false or error array on failure
+     */
+    private function create_invoice_with_wp_http($token, $invoice_data, $retry_count = 0)
+    {
+        $max_retries = 3; // Maximum number of retry attempts
+        $retry_delay = 2; // Delay between retries in seconds
+
+        // Log the request payload for debugging
+        error_log('Optima invoice request payload to Documents API (WP HTTP): ' . json_encode($invoice_data, JSON_PRETTY_PRINT));
+
+        $response = wp_remote_post($this->api_url . '/Documents', [
+            'timeout' => 45,
+            'redirection' => 5,
+            'httpversion' => '1.0',
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode($invoice_data)
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
+
+            // Retry on connection errors if we haven't exceeded max retries
+            if ($retry_count < $max_retries) {
+                error_log(sprintf(
+                    __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                    $retry_count + 1,
+                    $max_retries,
+                    $retry_delay
+                ));
+
+                // Wait before retrying
+                sleep($retry_delay);
+
+                // Retry with incremented retry count
+                return $this->create_invoice_with_wp_http($token, $invoice_data, $retry_count + 1);
+            }
+
+            return false;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $result = json_decode($body, true);
+
+        // Check for error responses (non-2xx status codes)
+        if ($status_code < 200 || $status_code >= 300) {
+            $error_message = '';
+
+            // Try to extract error message from response
+            if (is_array($result) && isset($result['Message'])) {
+                $error_message = $result['Message'];
+            } elseif (is_array($result) && isset($result['message'])) {
+                $error_message = $result['message'];
+            } elseif (is_array($result) && isset($result['error']) && isset($result['error']['message'])) {
+                $error_message = $result['error']['message'];
+            } elseif (is_array($result) && isset($result['ModelState'])) {
+                // Extract validation errors from ModelState
+                $validation_errors = [];
+                foreach ($result['ModelState'] as $field => $errors) {
+                    if (is_array($errors)) {
+                        foreach ($errors as $error) {
+                            $validation_errors[] = $field . ': ' . $error;
+                        }
+                    } else {
+                        $validation_errors[] = $field . ': ' . $errors;
+                    }
+                }
+                $error_message = 'Validation errors: ' . implode('; ', $validation_errors);
+            } elseif (!empty($body)) {
+                $error_message = $body;
+            } else {
+                $error_message = 'Unknown error (Status code: ' . $status_code . ')';
+            }
+
+            // Log full request and response for debugging
+            error_log('Optima invoice request payload to Documents API (WP HTTP): ' . json_encode($invoice_data, JSON_PRETTY_PRINT));
+            error_log('Optima Documents API response body (WP HTTP): ' . $body);
+
+            error_log(sprintf(__('Integracja WC Optima - Błąd API (%d): %s', 'optima-woocommerce'), $status_code, $error_message));
+
+            // Retry on server errors (5xx) if we haven't exceeded max retries
+            if ($status_code >= 500 && $retry_count < $max_retries) {
+                error_log(sprintf(
+                    __('Integracja WC Optima - Ponowna próba (%d/%d) za %d sekund', 'optima-woocommerce'),
+                    $retry_count + 1,
+                    $max_retries,
+                    $retry_delay
+                ));
+
+                // Wait before retrying
+                sleep($retry_delay);
+
+                // Retry with incremented retry count
+                return $this->create_invoice_with_wp_http($token, $invoice_data, $retry_count + 1);
+            }
+
+            // Return the error information so it can be used in the order note
+            return [
+                'error' => true,
+                'status_code' => $status_code,
+                'message' => $error_message,
+                'retries' => $retry_count,
+                'optima_request' => $invoice_data,
+                'optima_response' => $body,
+                'optima_response_parsed' => $result
+            ];
+        }
+
+        return $result;
+    }
 }

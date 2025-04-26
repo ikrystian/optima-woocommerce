@@ -2,7 +2,7 @@
 
 /**
  * Product synchronization class for Optima WooCommerce integration
- * 
+ *
  * @package Optima_WooCommerce
  */
 
@@ -38,7 +38,7 @@ class WC_Optima_Product_Sync
 
     /**
      * Process stock data and create a lookup array
-     * 
+     *
      * @param array $stocks Stock data from Optima API
      * @return array Processed stock data
      */
@@ -75,7 +75,7 @@ class WC_Optima_Product_Sync
 
     /**
      * Format prices from Optima for storage
-     * 
+     *
      * @param array $prices Prices from Optima API
      * @return array Formatted prices
      */
@@ -99,7 +99,7 @@ class WC_Optima_Product_Sync
 
     /**
      * Get retail price from product prices array
-     * 
+     *
      * @param array $prices Prices from Optima API
      * @return float Retail price
      */
@@ -127,7 +127,7 @@ class WC_Optima_Product_Sync
     /**
      * Get or create category by name
      * This function will get an existing category by name or create a new one if it doesn't exist
-     * 
+     *
      * @param string $category_name Category name
      * @return int Category ID
      */
@@ -165,7 +165,7 @@ class WC_Optima_Product_Sync
 
     /**
      * Get existing product SKUs from WooCommerce
-     * 
+     *
      * @return array Associative array of product SKUs to product IDs
      */
     private function get_existing_product_skus()
@@ -312,6 +312,7 @@ class WC_Optima_Product_Sync
             // Additional product metadata for WooCommerce custom fields
             $meta_data = [
                 '_optima_id' => isset($product['id']) ? $product['id'] : '',
+                '_optima_code' => isset($product['code']) ? $product['code'] : '', // Store the Optima code as a separate field
                 '_optima_type' => isset($product['type']) ? $product['type'] : '',
                 '_optima_vat_rate' => isset($product['vatRate']) ? $product['vatRate'] : '',
                 '_optima_unit' => isset($product['unit']) ? $product['unit'] : '',
