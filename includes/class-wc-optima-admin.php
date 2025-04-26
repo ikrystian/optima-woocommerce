@@ -407,6 +407,7 @@ class WC_Optima_Admin
                 <a href="?page=wc-optima-integration&tab=customers" class="nav-tab <?php echo $active_tab === 'customers' ? 'nav-tab-active' : ''; ?>"><?php _e('Klienci', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=rco" class="nav-tab <?php echo $active_tab === 'rco' ? 'nav-tab-active' : ''; ?>"><?php _e('Dokumenty RO', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=test" class="nav-tab <?php echo $active_tab === 'test' ? 'nav-tab-active' : ''; ?>"><?php _e('Test Faktury', 'optima-woocommerce'); ?></a>
+                <a href="?page=wc-optima-integration&tab=logs" class="nav-tab <?php echo $active_tab === 'logs' ? 'nav-tab-active' : ''; ?>"><?php _e('Logi', 'optima-woocommerce'); ?></a>
                 <a href="?page=wc-optima-integration&tab=settings" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>"><?php _e('Ustawienia', 'optima-woocommerce'); ?></a>
             </h2>
 
@@ -638,6 +639,158 @@ class WC_Optima_Admin
                         <div class="optima-invoice-history-preview">
                             <img src="<?php echo plugins_url('assets/images/invoice-history-preview.png', OPTIMA_WC_PLUGIN_FILE); ?>" alt="Invoice History Preview" style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                         </div>
+                    <?php endif; ?>
+                </div>
+
+            <?php elseif ($active_tab === 'logs'): ?>
+
+                <div class="optima-logs-section">
+                    <h2><?php _e('Logi API Optima', 'optima-woocommerce'); ?></h2>
+
+                    <?php
+                    // Handle clear logs action
+                    if (isset($_POST['wc_optima_clear_logs']) && wp_verify_nonce($_POST['wc_optima_logs_nonce'], 'wc_optima_clear_logs')) {
+                        $logs = new WC_Optima_Logs();
+                        $logs->clear_logs();
+                        echo '<div class="notice notice-success"><p>' . __('Logi zostały wyczyszczone.', 'optima-woocommerce') . '</p></div>';
+                    }
+
+                    // Get current page
+                    $current_page = isset($_GET['logs_page']) ? absint($_GET['logs_page']) : 1;
+
+                    // Get logs
+                    $logs = new WC_Optima_Logs();
+                    $logs_data = $logs->get_logs($current_page, 20);
+                    ?>
+
+                    <div class="optima-logs-actions">
+                        <form method="post">
+                            <?php wp_nonce_field('wc_optima_clear_logs', 'wc_optima_logs_nonce'); ?>
+                            <input type="submit" name="wc_optima_clear_logs" class="button" value="<?php _e('Wyczyść logi', 'optima-woocommerce'); ?>" onclick="return confirm('<?php _e('Czy na pewno chcesz wyczyścić wszystkie logi? Tej operacji nie można cofnąć.', 'optima-woocommerce'); ?>');">
+                        </form>
+                    </div>
+
+                    <?php if (empty($logs_data['logs'])): ?>
+                        <p><?php _e('Brak logów do wyświetlenia.', 'optima-woocommerce'); ?></p>
+                    <?php else: ?>
+                        <table class="widefat striped">
+                            <thead>
+                                <tr>
+                                    <th><?php _e('ID', 'optima-woocommerce'); ?></th>
+                                    <th><?php _e('Data i czas', 'optima-woocommerce'); ?></th>
+                                    <th><?php _e('Endpoint', 'optima-woocommerce'); ?></th>
+                                    <th><?php _e('Metoda', 'optima-woocommerce'); ?></th>
+                                    <th><?php _e('Status', 'optima-woocommerce'); ?></th>
+                                    <th><?php _e('Kod odpowiedzi', 'optima-woocommerce'); ?></th>
+                                    <th><?php _e('Akcje', 'optima-woocommerce'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($logs_data['logs'] as $log): ?>
+                                    <tr>
+                                        <td><?php echo esc_html($log['id']); ?></td>
+                                        <td><?php echo esc_html($log['timestamp']); ?></td>
+                                        <td><?php echo esc_html($log['endpoint']); ?></td>
+                                        <td><?php echo esc_html($log['request_method']); ?></td>
+                                        <td>
+                                            <?php if ($log['success']): ?>
+                                                <span class="dashicons dashicons-yes" style="color: green;" title="<?php _e('Sukces', 'optima-woocommerce'); ?>"></span>
+                                            <?php else: ?>
+                                                <span class="dashicons dashicons-frowny" style="color: red;" title="<?php _e('Błąd', 'optima-woocommerce'); ?>"></span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td><?php echo $log['status_code'] ? esc_html($log['status_code']) : '-'; ?></td>
+                                        <td>
+                                            <button type="button" class="button view-log-details" data-log-id="<?php echo esc_attr($log['id']); ?>"><?php _e('Szczegóły', 'optima-woocommerce'); ?></button>
+                                        </td>
+                                    </tr>
+                                    <tr class="log-details" id="log-details-<?php echo esc_attr($log['id']); ?>" style="display: none;">
+                                        <td colspan="7">
+                                            <div class="log-details-content">
+                                                <h4><?php _e('Dane zapytania:', 'optima-woocommerce'); ?></h4>
+                                                <pre><?php echo esc_html($log['request_data']); ?></pre>
+
+                                                <h4><?php _e('Dane odpowiedzi:', 'optima-woocommerce'); ?></h4>
+                                                <pre><?php echo esc_html($log['response_data']); ?></pre>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+
+                        <?php if ($logs_data['pages'] > 1): ?>
+                            <div class="tablenav">
+                                <div class="tablenav-pages">
+                                    <span class="displaying-num">
+                                        <?php printf(_n('%s element', '%s elementów', $logs_data['total'], 'optima-woocommerce'), number_format_i18n($logs_data['total'])); ?>
+                                    </span>
+
+                                    <span class="pagination-links">
+                                        <?php
+                                        // First page link
+                                        if ($current_page > 1) {
+                                            echo '<a class="first-page button" href="' . esc_url(add_query_arg(array('logs_page' => 1))) . '"><span class="screen-reader-text">' . __('Pierwsza strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&laquo;</span></a>';
+                                        } else {
+                                            echo '<span class="first-page button disabled"><span class="screen-reader-text">' . __('Pierwsza strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&laquo;</span></span>';
+                                        }
+
+                                        // Previous page link
+                                        if ($current_page > 1) {
+                                            echo '<a class="prev-page button" href="' . esc_url(add_query_arg(array('logs_page' => max(1, $current_page - 1)))) . '"><span class="screen-reader-text">' . __('Poprzednia strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&lsaquo;</span></a>';
+                                        } else {
+                                            echo '<span class="prev-page button disabled"><span class="screen-reader-text">' . __('Poprzednia strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&lsaquo;</span></span>';
+                                        }
+
+                                        // Current page text
+                                        echo '<span class="paging-input">' . $current_page . ' z <span class="total-pages">' . $logs_data['pages'] . '</span></span>';
+
+                                        // Next page link
+                                        if ($current_page < $logs_data['pages']) {
+                                            echo '<a class="next-page button" href="' . esc_url(add_query_arg(array('logs_page' => min($logs_data['pages'], $current_page + 1)))) . '"><span class="screen-reader-text">' . __('Następna strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&rsaquo;</span></a>';
+                                        } else {
+                                            echo '<span class="next-page button disabled"><span class="screen-reader-text">' . __('Następna strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&rsaquo;</span></span>';
+                                        }
+
+                                        // Last page link
+                                        if ($current_page < $logs_data['pages']) {
+                                            echo '<a class="last-page button" href="' . esc_url(add_query_arg(array('logs_page' => $logs_data['pages']))) . '"><span class="screen-reader-text">' . __('Ostatnia strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&raquo;</span></a>';
+                                        } else {
+                                            echo '<span class="last-page button disabled"><span class="screen-reader-text">' . __('Ostatnia strona', 'optima-woocommerce') . '</span><span aria-hidden="true">&raquo;</span></span>';
+                                        }
+                                        ?>
+                                    </span>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <script>
+                            jQuery(document).ready(function($) {
+                                $('.view-log-details').on('click', function() {
+                                    var logId = $(this).data('log-id');
+                                    $('#log-details-' + logId).toggle();
+                                });
+                            });
+                        </script>
+
+                        <style>
+                            .log-details-content {
+                                padding: 10px;
+                                background-color: #f9f9f9;
+                                border: 1px solid #ddd;
+                                margin: 10px 0;
+                            }
+
+                            .log-details-content pre {
+                                white-space: pre-wrap;
+                                word-wrap: break-word;
+                                background-color: #fff;
+                                padding: 10px;
+                                border: 1px solid #eee;
+                                max-height: 300px;
+                                overflow-y: auto;
+                            }
+                        </style>
                     <?php endif; ?>
                 </div>
 

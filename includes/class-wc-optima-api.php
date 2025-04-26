@@ -52,6 +52,13 @@ class WC_Optima_API
     private $token_expiry;
 
     /**
+     * Logs handler
+     *
+     * @var WC_Optima_Logs
+     */
+    private $logs;
+
+    /**
      * Constructor
      *
      * @param array $options Plugin options
@@ -62,6 +69,29 @@ class WC_Optima_API
         $this->api_url = $options['api_url'];
         $this->username = $options['username'];
         $this->password = $options['password'];
+
+        // Initialize logs handler
+        $this->logs = new WC_Optima_Logs();
+    }
+
+    /**
+     * Log API request
+     *
+     * @param string $endpoint API endpoint
+     * @param string $method Request method (GET, POST, etc.)
+     * @param array|string $request_data Request data
+     * @param array|string $response_data Response data
+     * @param int $status_code HTTP status code
+     * @param bool $success Whether the request was successful
+     * @return int|false The ID of the inserted log or false on failure
+     */
+    private function log_request($endpoint, $method, $request_data, $response_data, $status_code, $success)
+    {
+        if ($this->logs) {
+            return $this->logs->log_request($endpoint, $method, $request_data, $response_data, $status_code, $success);
+        }
+
+        return false;
     }
 
     /**
@@ -73,6 +103,8 @@ class WC_Optima_API
     public function get_ro_document_by_id($document_id)
     {
         $token = $this->get_access_token();
+        $endpoint = '/Documents/' . $document_id;
+        $method = 'GET';
 
         if (!$token) {
             error_log(__('Integracja WC Optima: Nie udało się uzyskać tokena dostępu', 'optima-woocommerce'));
@@ -94,12 +126,35 @@ class WC_Optima_API
                 ]
             ];
 
-            $response = $client->request('GET', $this->api_url . '/Documents/' . $document_id, $options);
-            $document = json_decode($response->getBody()->getContents(), true);
+            $response = $client->request($method, $this->api_url . $endpoint, $options);
+            $status_code = $response->getStatusCode();
+            $body = $response->getBody()->getContents();
+            $document = json_decode($body, true);
+
+            // Log the request
+            $this->log_request(
+                $endpoint,
+                $method,
+                $options,
+                $body,
+                $status_code,
+                $status_code >= 200 && $status_code < 300
+            );
 
             return $document;
         } catch (Exception $e) {
             error_log(__('Integracja WC Optima: Błąd podczas pobierania dokumentu RO wg ID - ', 'optima-woocommerce') . $e->getMessage());
+
+            // Log the failed request
+            $this->log_request(
+                $endpoint,
+                $method,
+                isset($options) ? $options : [],
+                ['error' => $e->getMessage()],
+                0,
+                false
+            );
+
             // Fall back to WordPress HTTP API
             return $this->get_ro_document_by_id_with_wp_http($token, $document_id);
         }
@@ -116,22 +171,49 @@ class WC_Optima_API
      */
     private function get_ro_document_by_id_with_wp_http($token, $document_id)
     {
-        $response = wp_remote_get($this->api_url . '/Documents/' . $document_id, [
+        $endpoint = '/Documents/' . $document_id;
+        $method = 'GET';
+        $request_args = [
             'timeout' => 45,
             'redirection' => 5,
             'httpversion' => '1.0',
             'headers' => [
                 'Authorization' => 'Bearer ' . $token
             ]
-        ]);
+        ];
+
+        $response = wp_remote_get($this->api_url . $endpoint, $request_args);
 
         if (is_wp_error($response)) {
-            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $response->get_error_message());
+            $error_message = $response->get_error_message();
+            error_log(__('Integracja WC Optima - Błąd WP HTTP: ', 'optima-woocommerce') . $error_message);
+
+            // Log the failed request
+            $this->log_request(
+                $endpoint,
+                $method,
+                $request_args,
+                ['error' => $error_message],
+                0,
+                false
+            );
+
             return false;
         }
 
+        $status_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
         $document = json_decode($body, true);
+
+        // Log the request
+        $this->log_request(
+            $endpoint,
+            $method,
+            $request_args,
+            $body,
+            $status_code,
+            $status_code >= 200 && $status_code < 300
+        );
 
         return $document;
     }

@@ -162,6 +162,9 @@ class WC_Optima_Integration
      */
     private function load_dependencies()
     {
+        // Load Logs class
+        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-logs.php';
+
         // Load API class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-api.php';
 
@@ -288,7 +291,7 @@ class WC_Optima_Integration
     }
 
     /**
-     * Plugin activation: schedule daily sync
+     * Plugin activation: schedule daily sync and create database tables
      */
     public function activate_plugin()
     {
@@ -309,6 +312,10 @@ class WC_Optima_Integration
         }
 
         wp_schedule_event($target_time, 'daily_at_0430', 'wc_optima_daily_sync');
+
+        // Create logs table
+        $logs = new WC_Optima_Logs();
+        $logs->create_table();
 
         // Log for debugging
         error_log(sprintf(__('Integracja WC Optima: Plugin aktywowany, zaplanowano zdarzenie na %s', 'optima-woocommerce'), date('Y-m-d H:i:s', $target_time)));
