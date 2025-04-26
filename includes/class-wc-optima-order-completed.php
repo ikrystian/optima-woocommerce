@@ -43,7 +43,7 @@ class WC_Optima_Order_Completed
 
         // Hook into order status completed
         add_action('woocommerce_order_status_completed', array($this, 'process_completed_order'), 10, 1);
-        
+
         // Add invoice link to order admin page
         add_action('woocommerce_admin_order_data_after_order_details', array($this, 'display_invoice_link_in_order'), 10, 1);
     }
@@ -73,13 +73,13 @@ class WC_Optima_Order_Completed
 
         if (!empty($invoice_id)) {
             error_log(sprintf(__('Integracja WC Optima: Faktura już istnieje dla zamówienia %s', 'optima-woocommerce'), $order_id));
-            
+
             // If invoice exists but wasn't sent, send it now
             $invoice_sent = get_post_meta($order_id, 'optima_invoice_sent', true);
             if (empty($invoice_sent)) {
                 $this->send_invoice_to_customer($order_id, $invoice_id);
             }
-            
+
             return;
         }
 
@@ -88,13 +88,13 @@ class WC_Optima_Order_Completed
 
         if (empty($ro_document_id)) {
             error_log(sprintf(__('Integracja WC Optima: Brak dokumentu RO dla zamówienia %s', 'optima-woocommerce'), $order_id));
-            
+
             // If no RO document exists, we need to create one first
             $this->create_ro_document_for_order($order_id);
-            
+
             // Get the newly created RO document ID
             $ro_document_id = get_post_meta($order_id, 'optima_ro_document_id', true);
-            
+
             if (empty($ro_document_id)) {
                 // If still no RO document, we can't proceed
                 $order->add_order_note(
@@ -329,7 +329,7 @@ class WC_Optima_Order_Completed
         if ($result && !isset($result['error'])) {
             // Store the invoice ID in the order meta (using the same RO document ID)
             update_post_meta($order_id, 'optima_invoice_id', $ro_document_id);
-            
+
             // Store the invoice number if available
             if (isset($result['invoiceNumber'])) {
                 update_post_meta($order_id, 'optima_invoice_number', $result['invoiceNumber']);
@@ -430,7 +430,7 @@ class WC_Optima_Order_Completed
 
         // Prepare email
         $subject = sprintf(__('Faktura nr %s do zamówienia %s', 'optima-woocommerce'), $invoice_number, $order->get_order_number());
-        
+
         // Email content
         $message = sprintf(
             __('Szanowny Kliencie,
@@ -464,7 +464,7 @@ Zespół %s', 'optima-woocommerce'),
         if ($mail_sent) {
             // Mark invoice as sent
             update_post_meta($order_id, 'optima_invoice_sent', 'yes');
-            
+
             // Add a note to the order
             $order->add_order_note(
                 sprintf(
@@ -473,7 +473,7 @@ Zespół %s', 'optima-woocommerce'),
                     $customer_email
                 )
             );
-            
+
             return true;
         } else {
             // Add a note to the order
@@ -484,7 +484,7 @@ Zespół %s', 'optima-woocommerce'),
                     $customer_email
                 )
             );
-            
+
             error_log(sprintf(__('Integracja WC Optima: Nie udało się wysłać faktury %s dla zamówienia %s na adres %s', 'optima-woocommerce'), $invoice_id, $order_id, $customer_email));
             return false;
         }
@@ -499,24 +499,24 @@ Zespół %s', 'optima-woocommerce'),
     {
         // Get the invoice ID from order meta
         $invoice_id = $order->get_meta('optima_invoice_id', true);
-        
+
         // Only display if we have an invoice ID
         if (empty($invoice_id)) {
             return;
         }
-        
+
         // Get invoice number
         $invoice_number = $order->get_meta('optima_invoice_number', true);
         if (empty($invoice_number)) {
             $invoice_number = $invoice_id;
         }
-        
+
         // Create a nonce for security
         $nonce = wp_create_nonce('wc_optima_fetch_invoices');
-        
+
         // Generate the URL for the invoice PDF
         $invoice_url = admin_url('admin-ajax.php?action=wc_optima_get_invoice_pdf&invoice_id=' . $invoice_id . '&nonce=' . $nonce . '&return_url=true');
-        
+
         // Display the invoice link
         echo '<p class="form-field form-field-wide">';
         echo '<strong>' . __('Faktura Optima:', 'optima-woocommerce') . '</strong> ';

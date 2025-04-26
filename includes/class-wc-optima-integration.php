@@ -528,13 +528,46 @@ class WC_Optima_Integration
                 }
             }
 
-            $order->add_order_note(
-                sprintf(
-                    __('Nie udało się utworzyć dokumentu RO Optima. Błąd %s: %s', 'optima-woocommerce'),
-                    $status_code,
-                    $detailed_error
-                )
+            // Create a more detailed error message with timestamp and request information
+            $error_timestamp = current_time('Y-m-d H:i:s');
+            $enhanced_error = sprintf(
+                __('Nie udało się utworzyć dokumentu RO Optima. [%s] Błąd %s:', 'optima-woocommerce'),
+                $error_timestamp,
+                $status_code
             );
+
+            // Add the detailed error message
+            $enhanced_error .= "\n\n" . $detailed_error;
+
+            // Add request URL and method if available
+            if (isset($result['request_url'])) {
+                $enhanced_error .= "\n\nURL: " . $result['request_url'];
+            }
+
+            if (isset($result['request_method'])) {
+                $enhanced_error .= "\nMetoda: " . $result['request_method'];
+            }
+
+            // Add request headers if available (sanitized)
+            if (isset($result['request_headers']) && is_array($result['request_headers'])) {
+                $enhanced_error .= "\n\nNagłówki zapytania:";
+                foreach ($result['request_headers'] as $header => $value) {
+                    // Skip sensitive headers like Authorization
+                    if (strtolower($header) !== 'authorization') {
+                        $enhanced_error .= "\n- " . $header . ": " . $value;
+                    }
+                }
+            }
+
+            // Log the error to the error log as well
+            error_log(sprintf(
+                'Optima API Error [%s]: %s - %s',
+                $error_timestamp,
+                $status_code,
+                $error_message
+            ));
+
+            $order->add_order_note($enhanced_error);
 
             // Check if this is a database version error
             if (strpos($error_message, 'Wersja bazy danych jest starsza') !== false) {
@@ -648,13 +681,46 @@ class WC_Optima_Integration
                 }
             }
 
-            $order->add_order_note(
-                sprintf(
-                    __('Nie udało się zaktualizować dokumentu w Optima. Błąd %s: %s', 'optima-woocommerce'),
-                    $status_code,
-                    $detailed_error
-                )
+            // Create a more detailed error message with timestamp and request information
+            $error_timestamp = current_time('Y-m-d H:i:s');
+            $enhanced_error = sprintf(
+                __('Nie udało się zaktualizować dokumentu w Optima. [%s] Błąd %s:', 'optima-woocommerce'),
+                $error_timestamp,
+                $status_code
             );
+
+            // Add the detailed error message
+            $enhanced_error .= "\n\n" . $detailed_error;
+
+            // Add request URL and method if available
+            if (isset($result['request_url'])) {
+                $enhanced_error .= "\n\nURL: " . $result['request_url'];
+            }
+
+            if (isset($result['request_method'])) {
+                $enhanced_error .= "\nMetoda: " . $result['request_method'];
+            }
+
+            // Add request headers if available (sanitized)
+            if (isset($result['request_headers']) && is_array($result['request_headers'])) {
+                $enhanced_error .= "\n\nNagłówki zapytania:";
+                foreach ($result['request_headers'] as $header => $value) {
+                    // Skip sensitive headers like Authorization
+                    if (strtolower($header) !== 'authorization') {
+                        $enhanced_error .= "\n- " . $header . ": " . $value;
+                    }
+                }
+            }
+
+            // Log the error to the error log as well
+            error_log(sprintf(
+                'Optima API Error [%s]: %s - %s',
+                $error_timestamp,
+                $status_code,
+                $error_message
+            ));
+
+            $order->add_order_note($enhanced_error);
 
             error_log(sprintf(__('Integracja WC Optima: Błąd podczas aktualizacji dokumentu dla zamówienia %s: %s', 'optima-woocommerce'), $order_id, $error_message));
         } else {
