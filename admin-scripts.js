@@ -29,7 +29,7 @@ jQuery(document).ready(function ($) {
               wc_optima_params.error_prefix +
               " " +
               (response.data || wc_optima_params.error_fetching_documents) +
-              "</p></div>"
+              "</p></div>",
           );
         }
       },
@@ -41,7 +41,7 @@ jQuery(document).ready(function ($) {
             wc_optima_params.error_prefix +
             " " +
             (error || wc_optima_params.generic_error) +
-            "</p></div>"
+            "</p></div>",
         );
       },
     });
@@ -53,15 +53,13 @@ jQuery(document).ready(function ($) {
       $("#wc-optima-ro-documents-results").html(
         '<div class="notice notice-warning"><p>' +
           wc_optima_params.no_documents_found +
-          "</p></div>"
+          "</p></div>",
       );
       return;
     }
 
     // Create table
-    var table = $(
-      '<table class="wp-list-table widefat fixed striped ro-documents">'
-    );
+    var table = $('<table class="wp-list-table widefat fixed striped ro-documents">');
 
     // Add table header
     var thead = $("<thead>").appendTo(table);
@@ -112,9 +110,7 @@ jQuery(document).ready(function ($) {
         .appendTo(row);
       $("<td>")
         .text(
-          document.documentSaleDate
-            ? new Date(document.documentSaleDate).toLocaleDateString()
-            : ""
+          document.documentSaleDate ? new Date(document.documentSaleDate).toLocaleDateString() : "",
         )
         .appendTo(row);
       $("<td>")
@@ -127,24 +123,20 @@ jQuery(document).ready(function ($) {
         .text(document.payer ? document.payer.name1 || document.payer.code : "")
         .appendTo(row);
       $("<td>")
-        .text(
-          document.recipient
-            ? document.recipient.name1 || document.recipient.code
-            : ""
-        )
+        .text(document.recipient ? document.recipient.name1 || document.recipient.code : "")
         .appendTo(row);
       $("<td>")
         .text(
           document.elements
             ? document.elements.length + " " + wc_optima_params.items_suffix
-            : "0 " + wc_optima_params.items_suffix
+            : "0 " + wc_optima_params.items_suffix,
         )
         .appendTo(row);
       $("<td>")
         .text(
           document.documentReservationDate
             ? new Date(document.documentReservationDate).toLocaleDateString()
-            : ""
+            : "",
         )
         .appendTo(row);
     });
@@ -183,7 +175,7 @@ jQuery(document).ready(function ($) {
           $("#wc-optima-customers-results").html(
             '<div class="notice notice-success"><p>' +
               wc_optima_params.customer_created_success +
-              "</p></div>"
+              "</p></div>",
           );
 
           // Display the new customer
@@ -196,7 +188,7 @@ jQuery(document).ready(function ($) {
               wc_optima_params.error_prefix +
               " " +
               (response.data || wc_optima_params.error_creating_customer) +
-              "</p></div>"
+              "</p></div>",
           );
         }
       },
@@ -208,7 +200,7 @@ jQuery(document).ready(function ($) {
             wc_optima_params.error_prefix +
             " " +
             (error || wc_optima_params.generic_error) +
-            "</p></div>"
+            "</p></div>",
         );
       },
     });
@@ -244,7 +236,7 @@ jQuery(document).ready(function ($) {
               wc_optima_params.error_prefix +
               " " +
               (response.data || wc_optima_params.error_fetching_customers) +
-              "</p></div>"
+              "</p></div>",
           );
         }
       },
@@ -256,7 +248,7 @@ jQuery(document).ready(function ($) {
             wc_optima_params.error_prefix +
             " " +
             (error || wc_optima_params.generic_error) +
-            "</p></div>"
+            "</p></div>",
         );
       },
     });
@@ -268,15 +260,13 @@ jQuery(document).ready(function ($) {
       $("#wc-optima-customers-results").html(
         '<div class="notice notice-warning"><p>' +
           wc_optima_params.no_customers_found +
-          "</p></div>"
+          "</p></div>",
       );
       return;
     }
 
     // Create table
-    var table = $(
-      '<table class="wp-list-table widefat fixed striped customers">'
-    );
+    var table = $('<table class="wp-list-table widefat fixed striped customers">');
 
     // Add table header
     var thead = $("<thead>").appendTo(table);
@@ -363,7 +353,7 @@ jQuery(document).ready(function ($) {
               wc_optima_params.error_prefix +
               " " +
               (response.data || wc_optima_params.document_not_found) +
-              "</p></div>"
+              "</p></div>",
           );
         }
       },
@@ -375,7 +365,7 @@ jQuery(document).ready(function ($) {
             wc_optima_params.error_prefix +
             " " +
             (error || wc_optima_params.generic_error) +
-            "</p></div>"
+            "</p></div>",
         );
       },
     });
@@ -409,7 +399,7 @@ jQuery(document).ready(function ($) {
           $("#wc-optima-invoices-results").html(
             '<div class="notice notice-error"><p>Error: ' +
               (response.data || "Failed to fetch invoices") +
-              "</p></div>"
+              "</p></div>",
           );
         }
       },
@@ -417,7 +407,7 @@ jQuery(document).ready(function ($) {
         // Hide loading indicator and show error
         $("#wc-optima-invoices-loading").hide();
         $("#wc-optima-invoices-results").html(
-          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>",
         );
       },
     });
@@ -475,7 +465,7 @@ jQuery(document).ready(function ($) {
           $("#wc-optima-invoices-results").html(
             '<div class="notice notice-warning"><p>' +
               (response.data || "No invoices found matching the search criteria") +
-              "</p></div>"
+              "</p></div>",
           );
         }
       },
@@ -483,7 +473,7 @@ jQuery(document).ready(function ($) {
         // Hide loading indicator and show error
         $("#wc-optima-invoices-loading").hide();
         $("#wc-optima-invoices-results").html(
-          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>"
+          '<div class="notice notice-error"><p>Error: ' + error + "</p></div>",
         );
       },
     });
@@ -493,29 +483,42 @@ jQuery(document).ready(function ($) {
   function displayInvoices(invoices) {
     if (!invoices.length) {
       $("#wc-optima-invoices-results").html(
-        '<div class="notice notice-warning"><p>No invoices found.</p></div>'
+        '<div class="notice notice-warning"><p>No invoices found.</p></div>',
       );
       return;
     }
 
     // Create table
-    var table = $(
-      '<table class="wp-list-table widefat fixed striped invoices">'
-    );
+    var table = $('<table class="wp-list-table widefat fixed striped invoices">');
 
     // Add table header
     var thead = $("<thead>").appendTo(table);
     var headerRow = $("<tr>").appendTo(thead);
 
+    // Add all invoice fields to the header
     $("<th>").text("ID").appendTo(headerRow);
     $("<th>").text("Invoice Number").appendTo(headerRow);
     $("<th>").text("Issue Date").appendTo(headerRow);
     $("<th>").text("Due Date").appendTo(headerRow);
+    $("<th>").text("Sale Date").appendTo(headerRow);
+    $("<th>").text("Payment Date").appendTo(headerRow);
     $("<th>").text("Net Value").appendTo(headerRow);
     $("<th>").text("Gross Value").appendTo(headerRow);
     $("<th>").text("Currency").appendTo(headerRow);
     $("<th>").text("Customer ID").appendTo(headerRow);
+    $("<th>").text("Customer Name").appendTo(headerRow);
+    $("<th>").text("Customer NIP").appendTo(headerRow);
     $("<th>").text("Document Type").appendTo(headerRow);
+    $("<th>").text("Document Type ID").appendTo(headerRow);
+    $("<th>").text("Payment Method").appendTo(headerRow);
+    $("<th>").text("Payment Method ID").appendTo(headerRow);
+    $("<th>").text("Status").appendTo(headerRow);
+    $("<th>").text("Paid").appendTo(headerRow);
+    $("<th>").text("Canceled").appendTo(headerRow);
+    $("<th>").text("Foreign Number").appendTo(headerRow);
+    $("<th>").text("Description").appendTo(headerRow);
+    $("<th>").text("Discount").appendTo(headerRow);
+    $("<th>").text("VAT Registration Country").appendTo(headerRow);
     $("<th>").text("Actions").appendTo(headerRow);
 
     // Add table body
@@ -525,32 +528,28 @@ jQuery(document).ready(function ($) {
     $.each(invoices, function (index, invoice) {
       var row = $("<tr>").appendTo(tbody);
 
+      // Format dates and values
+      var formatDate = function (dateString) {
+        return dateString ? new Date(dateString).toLocaleDateString() : "";
+      };
+
+      var formatCurrency = function (value, currency) {
+        return value ? parseFloat(value).toFixed(2) + " " + (currency || "") : "0.00";
+      };
+
+      // Add all invoice fields to the row
       $("<td>")
         .text(invoice.id || "")
         .appendTo(row);
       $("<td>")
         .text(invoice.invoiceNumber || "")
         .appendTo(row);
-      $("<td>")
-        .text(
-          invoice.issueDate
-            ? new Date(invoice.issueDate).toLocaleDateString()
-            : ""
-        )
-        .appendTo(row);
-      $("<td>")
-        .text(
-          invoice.dueDate
-            ? new Date(invoice.dueDate).toLocaleDateString()
-            : ""
-        )
-        .appendTo(row);
-      $("<td>")
-        .text(invoice.netValue ? parseFloat(invoice.netValue).toFixed(2) : "0.00")
-        .appendTo(row);
-      $("<td>")
-        .text(invoice.grossValue ? parseFloat(invoice.grossValue).toFixed(2) : "0.00")
-        .appendTo(row);
+      $("<td>").text(formatDate(invoice.issueDate)).appendTo(row);
+      $("<td>").text(formatDate(invoice.dueDate)).appendTo(row);
+      $("<td>").text(formatDate(invoice.saleDate)).appendTo(row);
+      $("<td>").text(formatDate(invoice.paymentDate)).appendTo(row);
+      $("<td>").text(formatCurrency(invoice.netValue, invoice.currency)).appendTo(row);
+      $("<td>").text(formatCurrency(invoice.grossValue, invoice.currency)).appendTo(row);
       $("<td>")
         .text(invoice.currency || "")
         .appendTo(row);
@@ -558,7 +557,43 @@ jQuery(document).ready(function ($) {
         .text(invoice.customerId || "")
         .appendTo(row);
       $("<td>")
+        .text(invoice.customerName || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.customerNip || "")
+        .appendTo(row);
+      $("<td>")
         .text(invoice.documentTypeName || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.documentTypeId || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.paymentMethodName || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.paymentMethodId || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.status || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.paid ? "Yes" : "No")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.canceled ? "Yes" : "No")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.foreignNumber || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.description || "")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.discount ? invoice.discount + "%" : "0%")
+        .appendTo(row);
+      $("<td>")
+        .text(invoice.vatRegistrationCountry || "")
         .appendTo(row);
 
       // Add action buttons
@@ -579,6 +614,9 @@ jQuery(document).ready(function ($) {
     $("<p>")
       .text("Showing " + invoices.length + " invoices")
       .prependTo("#wc-optima-invoices-results");
+
+    // Add horizontal scroll container for better usability with many columns
+    $("#wc-optima-invoices-results table").wrap('<div style="overflow-x: auto;"></div>');
   }
 
   // Function to download invoice PDF
@@ -599,33 +637,20 @@ jQuery(document).ready(function ($) {
         // Hide loading indicator
         $("#wc-optima-invoices-loading").hide();
 
-        if (response.success && response.data && response.data.pdf_data) {
-          // Create a blob from the base64 data
-          var binary = atob(response.data.pdf_data);
-          var array = [];
-          for (var i = 0; i < binary.length; i++) {
-            array.push(binary.charCodeAt(i));
-          }
-          var blob = new Blob([new Uint8Array(array)], { type: 'application/pdf' });
-          
-          // Create a URL for the blob
-          var url = URL.createObjectURL(blob);
-          
-          // Create a temporary link and trigger download
-          var a = document.createElement('a');
-          a.href = url;
-          a.download = response.data.filename || 'invoice.pdf';
-          document.body.appendChild(a);
-          a.click();
-          
-          // Clean up
-          setTimeout(function() {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          }, 100);
+        if (response.success && response.data && response.data.download_url) {
+          // Create a hidden iframe to trigger the download
+          var iframe = document.createElement("iframe");
+          iframe.style.display = "none";
+          iframe.src = response.data.download_url;
+          document.body.appendChild(iframe);
+
+          // Remove the iframe after a short delay
+          setTimeout(function () {
+            document.body.removeChild(iframe);
+          }, 2000);
         } else {
           // Show error message
-          alert("Error: " + (response.data || "Failed to generate PDF"));
+          alert("Error: " + (response.data || "Failed to generate invoice"));
         }
       },
       error: function (xhr, status, error) {
@@ -636,3 +661,4 @@ jQuery(document).ready(function ($) {
     });
   }
 });
+

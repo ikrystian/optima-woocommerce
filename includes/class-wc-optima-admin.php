@@ -126,7 +126,13 @@ class WC_Optima_Admin
                 'th_payer' => __('Płatnik', 'optima-woocommerce'),
                 'th_recipient' => __('Odbiorca', 'optima-woocommerce'),
                 'th_elements' => __('Elementy', 'optima-woocommerce'),
-                'th_reservation_date' => __('Data rezerwacji', 'optima-woocommerce')
+                'th_reservation_date' => __('Data rezerwacji', 'optima-woocommerce'),
+                // Duplicate SKU removal strings
+                'remove_duplicates_nonce' => wp_create_nonce('wc_optima_remove_duplicate_skus'),
+                'removing_duplicates' => __('Usuwanie duplikatów SKU...', 'optima-woocommerce'),
+                'duplicates_removed_success' => __('Usunięto %d zduplikowanych produktów.', 'optima-woocommerce'), // %d will be replaced
+                'no_duplicates_found' => __('Nie znaleziono zduplikowanych produktów.', 'optima-woocommerce'),
+                'error_removing_duplicates' => __('Błąd podczas usuwania duplikatów.', 'optima-woocommerce')
             ));
         }
     }
@@ -1099,19 +1105,33 @@ class WC_Optima_Admin
      */
     public function ajax_get_invoice_pdf()
     {
+        // Get nonce from either POST or GET
+        $nonce = '';
+        if (isset($_POST['nonce'])) {
+            $nonce = $_POST['nonce'];
+        } elseif (isset($_GET['nonce'])) {
+            $nonce = $_GET['nonce'];
+        }
+
         // Check nonce
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_fetch_invoices')) {
+        if (empty($nonce) || !wp_verify_nonce($nonce, 'wc_optima_fetch_invoices')) {
             wp_send_json_error('Invalid security token');
             return;
         }
 
+        // Get invoice ID from either POST or GET
+        $invoice_id = 0;
+        if (isset($_POST['invoice_id']) && !empty($_POST['invoice_id'])) {
+            $invoice_id = intval($_POST['invoice_id']);
+        } elseif (isset($_GET['invoice_id']) && !empty($_GET['invoice_id'])) {
+            $invoice_id = intval($_GET['invoice_id']);
+        }
+
         // Check if invoice ID is provided
-        if (!isset($_POST['invoice_id']) || empty($_POST['invoice_id'])) {
+        if ($invoice_id <= 0) {
             wp_send_json_error('Invoice ID is required');
             return;
         }
-
-        $invoice_id = intval($_POST['invoice_id']);
 
         // Get the invoice handler
         $invoice_handler = WC_Optima_Integration::get_invoice_instance();

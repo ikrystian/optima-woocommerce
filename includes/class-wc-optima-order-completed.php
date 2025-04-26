@@ -335,19 +335,28 @@ class WC_Optima_Order_Completed
             'foreignNumber' => 'WC_' . $order->get_order_number(),
             'calculatedOn' => 1, // 1 = gross, 2 = net
             'paymentMethod' => isset($document['paymentMethod']) ? $document['paymentMethod'] : 'przelew',
+            'paymentMethodId' => isset($document['paymentMethodId']) ? $document['paymentMethodId'] : null,
             'currency' => $order->get_currency(),
             'description' => sprintf(
                 __('Faktura do zamówienia #%s z WooCommerce (RO: %s)', 'optima-woocommerce'),
                 $order->get_order_number(),
                 $ro_document_id
             ),
+            'discount' => isset($document['discount']) ? $document['discount'] : 0,
+            'documentTypeId' => 302, // Invoice document type ID
+            'paid' => $order->is_paid(),
+            'canceled' => false,
 
             // Document dates
             'documentIssueDate' => date('Y-m-d\TH:i:s'),
+            'saleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
+            'paymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
 
             // Warehouse information
             'SourceWareHouseId' => isset($document['SourceWareHouseId']) ? $document['SourceWareHouseId'] : 1,
 
+            // VAT Registration Country
+            'vatRegistrationCountry' => 'PL', // Default to Poland, can be overridden if available in document
         ];
 
         // Customer information - copy from RO document
