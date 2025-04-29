@@ -48,6 +48,7 @@ class WC_Optima_Admin
         // Add AJAX handler for RO documents
         add_action('wp_ajax_wc_optima_fetch_ro_documents', array($this, 'ajax_fetch_ro_documents'));
         add_action('wp_ajax_wc_optima_search_ro_document', array($this, 'ajax_search_ro_document'));
+        add_action('wp_ajax_wc_optima_get_ro_document_details', array($this, 'ajax_get_ro_document_details')); // Nowa akcja AJAX
 
         // Add AJAX handlers for invoices
         add_action('wp_ajax_wc_optima_fetch_invoices', array($this, 'ajax_fetch_invoices'));
@@ -91,6 +92,7 @@ class WC_Optima_Admin
                 'invoice_nonce' => wp_create_nonce('wc_optima_fetch_invoices'),
                 'ro_nonce' => wp_create_nonce('wc_optima_fetch_ro_documents'),
                 'search_nonce' => wp_create_nonce('wc_optima_search_ro_document'), // Add nonce for search
+                'ro_details_nonce' => wp_create_nonce('wc_optima_get_ro_document_details'), // Nowy nonce dla szczegółów RO
                 'loading_customers' => __('Ładowanie klientów...', 'optima-woocommerce'),
                 'loading_documents' => __('Ładowanie dokumentów RO...', 'optima-woocommerce'),
                 'error_fetching_customers' => __('Błąd podczas pobierania klientów.', 'optima-woocommerce'),
@@ -288,6 +290,44 @@ class WC_Optima_Admin
 
         // Send success response
         wp_send_json_success($documents);
+    }
+
+    /**
+     * AJAX handler for fetching RO document details by ID
+     */
+    public function ajax_get_ro_document_details()
+    {
+        // Check nonce
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wc_optima_get_ro_document_details')) {
+            wp_send_json_error(__('Nieprawidłowy token bezpieczeństwa', 'optima-woocommerce'));
+            return;
+        }
+
+        // Check if document ID is provided
+        if (!isset($_POST['document_id']) || empty($_POST['document_id'])) {
+            wp_send_json_error(__('ID dokumentu jest wymagane', 'optima-woocommerce'));
+            return;
+        }
+
+        $document_id = sanitize_text_field($_POST['document_id']);
+
+        // Get API instance
+        $api = WC_Optima_Integration::get_api_instance();
+        if (!$api) {
+            wp_send_json_error(__('API nie zostało zainicjowane', 'optima-woocommerce'));
+            return;
+        }
+
+        // Get specific document details by ID
+        $document_details = $api->get_ro_document_by_id($document_id);
+
+        if (!$document_details) {
+            wp_send_json_error(sprintf(__('Nie znaleziono szczegółów dokumentu o ID: %s', 'optima-woocommerce'), $document_id));
+            return;
+        }
+
+        // Send success response with details
+        wp_send_json_success($document_details);
     }
 
     /**
@@ -523,6 +563,18 @@ class WC_Optima_Admin
 
                         <div id="wc-optima-ro-documents-results" style="margin-top: 20px;">
                             <!-- Results will be displayed here -->
+                        </div>
+
+                        <!-- Modal for RO Details -->
+                        <div id="ro-details-modal" class="ro-modal" style="display: none;">
+                            <div class="ro-modal-content">
+                                <span class="ro-modal-close">&times;</span>
+                                <h2><?php _e('Szczegóły Dokumentu RO', 'optima-woocommerce'); ?></h2>
+                                <div id="ro-details-modal-content">
+                                    <!-- Details will be loaded here via AJAX -->
+                                    <p><?php _e('Ładowanie szczegółów...', 'optima-woocommerce'); ?></p>
+                                </div>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>

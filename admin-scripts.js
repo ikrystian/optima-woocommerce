@@ -79,6 +79,7 @@ jQuery(document).ready(function ($) {
     $("<th>").text(wc_optima_params.th_recipient).appendTo(headerRow);
     $("<th>").text(wc_optima_params.th_elements).appendTo(headerRow);
     $("<th>").text(wc_optima_params.th_reservation_date).appendTo(headerRow);
+    headerRow.append("<th>Akcje</th>"); // Dodanie nagłówka kolumny Akcje jako HTML
 
     // Add table body
     var tbody = $("<tbody>").appendTo(table);
@@ -139,6 +140,20 @@ jQuery(document).ready(function ($) {
             : "",
         )
         .appendTo(row);
+
+      // Dodanie console.log do debugowania
+      console.log("Processing document ID:", document.id);
+
+      // Dodanie komórki z przyciskiem "Pokaż szczegóły" jako HTML
+      row.append(
+        "<td>" +
+          '<button class="button button-small show-ro-details-button" data-doc-id="' +
+          document.id +
+          '">' +
+          "Pokaż szczegóły" +
+          "</button>" +
+          "</td>",
+      );
     });
 
     // Add table to results div
@@ -149,6 +164,227 @@ jQuery(document).ready(function ($) {
       .text(wc_optima_params.showing_documents.replace("%d", documents.length))
       .prependTo("#wc-optima-ro-documents-results");
   }
+
+  // Obsługa kliknięcia przycisku "Pokaż szczegóły" dla dokumentu RO
+  $("#wc-optima-ro-documents-results").on("click", ".show-ro-details-button", function (e) {
+    e.preventDefault();
+    var documentId = $(this).data("doc-id");
+
+    // Pokaż wskaźnik ładowania (można dodać dedykowany)
+    // $("#wc-optima-ro-details-loading").show(); // Przykładowy ID
+    $("#wc-optima-ro-documents-loading").show(); // Użyjemy istniejącego na razie
+
+    // Wyczyść poprzednie szczegóły w modalu
+    $("#ro-details-modal-content").empty();
+
+    $.ajax({
+      url: wc_optima_params.ajax_url,
+      type: "POST",
+      data: {
+        action: "wc_optima_get_ro_document_details", // Nowa akcja AJAX
+        nonce: wc_optima_params.ro_details_nonce, // Nowy nonce
+        document_id: documentId,
+      },
+      success: function (response) {
+        $("#wc-optima-ro-documents-loading").hide(); // Ukryj wskaźnik ładowania
+
+        if (response.success && response.data) {
+          displayRODetailsModal(response.data);
+        } else {
+          alert(
+            wc_optima_params.error_prefix +
+              " " +
+              (response.data || "Nie udało się pobrać szczegółów dokumentu."),
+          );
+        }
+      },
+      error: function (xhr, status, error) {
+        $("#wc-optima-ro-documents-loading").hide(); // Ukryj wskaźnik ładowania
+        alert(wc_optima_params.error_prefix + " " + (error || wc_optima_params.generic_error));
+      },
+    });
+  });
+
+  // Funkcja do wyświetlania szczegółów dokumentu RO w modalu jako tabela
+  function displayRODetailsModal(details) {
+    var modalContent = $("#ro-details-modal-content");
+    modalContent.empty(); // Wyczyść poprzednią zawartość
+
+    // Główne informacje dokumentu
+    var mainInfoTable = $('<table class="wp-list-table widefat fixed striped ro-details-table">');
+    var mainInfoThead = $("<thead>").appendTo(mainInfoTable);
+    var mainInfoHeaderRow = $("<tr>").appendTo(mainInfoThead);
+
+    $("<th>").text("Pole").appendTo(mainInfoHeaderRow);
+    $("<th>").text("Wartość").appendTo(mainInfoHeaderRow);
+
+    var mainInfoTbody = $("<tbody>").appendTo(mainInfoTable);
+
+    // Dodaj główne informacje do tabeli
+    for (var key in details) {
+      if (details.hasOwnProperty(key) && key !== "elements" && typeof details[key] !== "object") {
+        var row = $("<tr>").appendTo(mainInfoTbody);
+        $("<td>").text(formatDetailKey(key)).addClass("ro-detail-label").appendTo(row);
+        $("<td>").text(details[key]).appendTo(row);
+      }
+    }
+
+    // Dodaj główną tabelę do modalu
+    modalContent.append($("<h3>").text("Informacje podstawowe"));
+    modalContent.append(mainInfoTable);
+
+    // Obsługa obiektów zagnieżdżonych (np. płatnik, odbiorca)
+    for (var key in details) {
+      if (
+        details.hasOwnProperty(key) &&
+        typeof details[key] === "object" &&
+        details[key] !== null &&
+        !Array.isArray(details[key]) &&
+        key !== "elements"
+      ) {
+        var nestedTable = $(
+          '<table class="wp-list-table widefat fixed striped ro-details-nested-table">',
+        );
+        var nestedThead = $("<thead>").appendTo(nestedTable);
+        var nestedHeaderRow = $("<tr>").appendTo(nestedThead);
+
+        $("<th>").text("Pole").appendTo(nestedHeaderRow);
+        $("<th>").text("Wartość").appendTo(nestedHeaderRow);
+
+        var nestedTbody = $("<tbody>").appendTo(nestedTable);
+
+        for (var nestedKey in details[key]) {
+          if (details[key].hasOwnProperty(nestedKey)) {
+            var nestedRow = $("<tr>").appendTo(nestedTbody);
+            $("<td>")
+              .text(formatDetailKey(nestedKey))
+              .addClass("ro-detail-label")
+              .appendTo(nestedRow);
+            $("<td>").text(details[key][nestedKey]).appendTo(nestedRow);
+          }
+        }
+
+        modalContent.append($("<h3>").text(formatDetailKey(key)));
+        modalContent.append(nestedTable);
+      }
+    }
+
+    // Obsługa elementów (jeśli istnieją)
+    if (details.elements && Array.isArray(details.elements) && details.elements.length > 0) {
+      modalContent.append($("<h3>").text("Elementy dokumentu"));
+
+      // Pobierz wszystkie możliwe klucze z elementów
+      var allElementKeys = [];
+      details.elements.forEach(function (element) {
+        for (var key in element) {
+          if (element.hasOwnProperty(key) && allElementKeys.indexOf(key) === -1) {
+            allElementKeys.push(key);
+          }
+        }
+      });
+
+      // Utwórz tabelę elementów
+      var elementsTable = $(
+        '<table class="wp-list-table widefat fixed striped ro-elements-table">',
+      );
+      var elementsThead = $("<thead>").appendTo(elementsTable);
+      var elementsHeaderRow = $("<tr>").appendTo(elementsThead);
+
+      // Dodaj nagłówki kolumn
+      $("<th>").text("Lp.").appendTo(elementsHeaderRow);
+      allElementKeys.forEach(function (key) {
+        $("<th>").text(formatDetailKey(key)).appendTo(elementsHeaderRow);
+      });
+
+      var elementsTbody = $("<tbody>").appendTo(elementsTable);
+
+      // Dodaj wiersze dla każdego elementu
+      details.elements.forEach(function (element, index) {
+        var elementRow = $("<tr>").appendTo(elementsTbody);
+
+        // Dodaj numer porządkowy
+        $("<td>")
+          .text(index + 1)
+          .appendTo(elementRow);
+
+        // Dodaj wartości dla każdej kolumny
+        allElementKeys.forEach(function (key) {
+          var cell = $("<td>").appendTo(elementRow);
+
+          if (element.hasOwnProperty(key)) {
+            if (typeof element[key] === "object" && element[key] !== null) {
+              // Dla zagnieżdżonych obiektów w elemencie, wyświetl jako JSON
+              cell.text(JSON.stringify(element[key]));
+            } else {
+              cell.text(element[key]);
+            }
+          } else {
+            cell.text("-");
+          }
+        });
+      });
+
+      // Dodaj tabelę elementów do modalu
+      modalContent.append(elementsTable);
+
+      // Dodaj przewijanie poziome dla tabeli elementów
+      elementsTable.wrap('<div style="overflow-x: auto; margin-bottom: 20px;"></div>');
+    }
+
+    // Dodaj style CSS dla tabel
+    $("<style>")
+      .text(
+        `
+        
+        .ro-details-table, .ro-details-nested-table, .ro-elements-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+          table-layout: auto !important;
+        }
+        .ro-details-table th, .ro-details-nested-table th, .ro-elements-table th {
+          background-color: #f1f1f1;
+          font-weight: bold;
+        }
+        .ro-details-table td, .ro-details-nested-table td, .ro-elements-table td,
+        .ro-details-table th, .ro-details-nested-table th, .ro-elements-table th {
+          padding: 8px;
+          border: 1px solid #ddd;
+        }
+        .ro-detail-label {
+          font-weight: bold;
+          width: 30%;
+        }
+        #ro-details-modal-content h3 {
+          margin-top: 20px;
+          margin-bottom: 10px;
+        }
+      `,
+      )
+      .appendTo(modalContent);
+
+    // Pokaż modal
+    $("#ro-details-modal").show();
+  }
+
+  // Funkcja pomocnicza do formatowania kluczy JSON na bardziej czytelne etykiety
+  function formatDetailKey(key) {
+    // Prosta zamiana camelCase na słowa z wielkiej litery
+    var result = key.replace(/([A-Z])/g, " $1");
+    return result.charAt(0).toUpperCase() + result.slice(1);
+  }
+
+  // Obsługa zamknięcia modala
+  $(".ro-modal-close").on("click", function () {
+    $("#ro-details-modal").hide();
+  });
+
+  // Zamknięcie modala po kliknięciu poza nim
+  $(window).on("click", function (event) {
+    if ($(event.target).is("#ro-details-modal")) {
+      $("#ro-details-modal").hide();
+    }
+  });
 
   // Handle the create sample customer button click
   $("#wc-optima-create-customer").on("click", function (e) {
