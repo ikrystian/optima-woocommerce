@@ -45,13 +45,6 @@ class WC_Optima_Integration
     private $customer;
 
     /**
-     * Instance of the invoice handler
-     *
-     * @var WC_Optima_Invoice
-     */
-    private $invoice;
-
-    /**
      * Instance of the GUS API handler
      *
      * @var WC_Optima_GUS_API
@@ -99,13 +92,6 @@ class WC_Optima_Integration
      * @var WC_Optima_Order_Completed
      */
     private $order_completed;
-
-    /**
-     * Instance of the invoice history handler
-     *
-     * @var WC_Optima_Invoice_History
-     */
-    private $invoice_history;
 
     /**
      * Instance of the product fields handler
@@ -165,10 +151,6 @@ class WC_Optima_Integration
         // Add hooks for RO document creation
         add_action('woocommerce_payment_complete', array($this, 'create_ro_document_for_order'), 10, 1);
         add_action('woocommerce_order_status_processing', array($this, 'create_ro_document_for_order'), 10, 1);
-
-        // Add hook for creating invoice after payment
-        add_action('woocommerce_payment_complete', array($this, 'create_invoice_for_order'), 20, 1);
-        add_action('woocommerce_order_status_completed', array($this, 'create_invoice_for_order'), 20, 1);
     }
 
     /**
@@ -190,9 +172,6 @@ class WC_Optima_Integration
 
         // Load Customer class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-customer.php';
-
-        // Load Invoice class
-        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-invoice.php';
 
         // Load GUS API class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-gus-api.php';
@@ -218,9 +197,6 @@ class WC_Optima_Integration
         // Load Order Completed class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-order-completed.php';
 
-        // Load Invoice History class
-        require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-invoice-history.php';
-
         // Load Product Fields class
         require_once plugin_dir_path(OPTIMA_WC_PLUGIN_FILE) . 'includes/class-wc-optima-product-fields.php';
     }
@@ -245,9 +221,6 @@ class WC_Optima_Integration
         // Initialize Customer handler
         $this->customer = new WC_Optima_Customer(self::$api);
 
-        // Initialize Invoice handler
-        $this->invoice = new WC_Optima_Invoice(self::$api);
-
         // Initialize AJAX handler
         $this->ajax = new WC_Optima_AJAX($this->gus_api, self::$api);
 
@@ -262,10 +235,7 @@ class WC_Optima_Integration
         $this->account = new WC_Optima_Account($this->options);
 
         // Initialize Order Completed handler
-        $this->order_completed = new WC_Optima_Order_Completed(self::$api, $this->invoice);
-
-        // Initialize Invoice History handler
-        $this->invoice_history = new WC_Optima_Invoice_History($this->options);
+        $this->order_completed = new WC_Optima_Order_Completed(self::$api);
 
         // Initialize Product Fields handler
         $this->product_fields = new WC_Optima_Product_Fields(self::$api);
@@ -279,17 +249,6 @@ class WC_Optima_Integration
     public static function get_api_instance()
     {
         return self::$api;
-    }
-
-    /**
-     * Get invoice instance
-     *
-     * @return WC_Optima_Invoice|null Invoice instance or null if not initialized
-     */
-    public static function get_invoice_instance()
-    {
-        $instance = new self();
-        return $instance->invoice;
     }
 
     /**
@@ -627,204 +586,6 @@ class WC_Optima_Integration
                 __('Nie udało się utworzyć dokumentu RO Optima.', 'optima-woocommerce')
             );
             error_log(sprintf(__('Integracja WC Optima: Nie udało się utworzyć dokumentu RO dla zamówienia %s', 'optima-woocommerce'), $order_id));
-        }
-    }
-
-    /**
-     * Create invoice for order
-     *
-     * When an order is paid, create a new invoice in Optima
-     *
-     * @param int $order_id Order ID
-     */
-    public function create_invoice_for_order($order_id)
-    {
-        // Get the order
-        $order = wc_get_order($order_id);
-
-        if (!$order) {
-            error_log(sprintf(__('Integracja WC Optima: Nie znaleziono zamówienia - %s', 'optima-woocommerce'), $order_id));
-            return;
-        }
-
-        // Check if invoice already created for this order
-        $invoice_id = get_post_meta($order_id, 'optima_invoice_id', true);
-
-        if (!empty($invoice_id)) {
-            error_log(sprintf(__('Integracja WC Optima: Faktura już istnieje dla zamówienia %s', 'optima-woocommerce'), $order_id));
-            return;
-        }
-
-        // Check if RO document exists for this order
-        $ro_document_id = get_post_meta($order_id, 'optima_ro_document_id', true);
-
-        if (empty($ro_document_id)) {
-            error_log(sprintf(__('Integracja WC Optima: Brak dokumentu RO dla zamówienia %s', 'optima-woocommerce'), $order_id));
-            return;
-        }
-
-        // Get the RO document from Optima to use its data for creating the invoice
-        $ro_document = self::$api->get_ro_document_by_id($ro_document_id);
-
-        if (!$ro_document) {
-            error_log(sprintf(__('Integracja WC Optima: Nie udało się pobrać dokumentu RO %s dla zamówienia %s', 'optima-woocommerce'), $ro_document_id, $order_id));
-            return;
-        }
-
-        // Create a new invoice data structure based on the RO document
-        $invoice_data = [
-            // Basic invoice information
-            'type' => 302, // Invoice document type (302 is the type for invoice)
-            'status' => 1,  // Status 1 means active/normal
-            'foreignNumber' => 'WC_' . $order->get_order_number(),
-            'calculatedOn' => 1, // 1 = gross, 2 = net
-            'paymentMethod' => isset($ro_document['paymentMethod']) ? $ro_document['paymentMethod'] : 'przelew',
-            'paymentMethodId' => isset($ro_document['paymentMethodId']) ? $ro_document['paymentMethodId'] : null,
-            'currency' => $order->get_currency(),
-            'description' => sprintf(
-                __('Faktura do zamówienia #%s z WooCommerce (RO: %s)', 'optima-woocommerce'),
-                $order->get_order_number(),
-                $ro_document_id
-            ),
-            'discount' => isset($ro_document['discount']) ? $ro_document['discount'] : 0,
-            'documentTypeId' => 302, // Invoice document type ID
-            'paid' => $order->is_paid(),
-            'canceled' => false,
-
-            // Document dates
-            'documentIssueDate' => date('Y-m-d\TH:i:s'),
-            'saleDate' => $order->get_date_created()->date('Y-m-d\TH:i:s'),
-            'paymentDate' => $order->get_date_paid() ? $order->get_date_paid()->date('Y-m-d\TH:i:s') : date('Y-m-d\TH:i:s', strtotime('+7 days')),
-
-            // Warehouse information
-            'SourceWareHouseId' => isset($ro_document['SourceWareHouseId']) ? $ro_document['SourceWareHouseId'] : 1,
-
-            // VAT Registration Country
-            'vatRegistrationCountry' => 'PL', // Default to Poland, can be overridden if available in document
-        ];
-
-        // Customer information - copy from RO document
-        if (isset($ro_document['payer']) && is_array($ro_document['payer'])) {
-            $invoice_data['payer'] = $ro_document['payer'];
-        } elseif (isset($ro_document['payerId'])) {
-            // If we have a payer ID but not payer details, create a minimal payer object
-            $invoice_data['payer'] = [
-                'code' => $ro_document['payerId']
-            ];
-        }
-
-        // Copy elements (products) from RO document
-        if (isset($ro_document['elements']) && is_array($ro_document['elements'])) {
-            $invoice_data['elements'] = $ro_document['elements'];
-        } else {
-            $invoice_data['elements'] = [];
-        }
-
-        // Create the invoice in Optima
-        $result = self::$api->create_invoice($invoice_data);
-
-        if ($result && isset($result['id'])) {
-            // Store the invoice ID in the order meta
-            update_post_meta($order_id, 'optima_invoice_id', $result['id']);
-
-            // Store the invoice number if available
-            if (isset($result['invoiceNumber'])) {
-                update_post_meta($order_id, 'optima_invoice_number', $result['invoiceNumber']);
-            } elseif (isset($result['fullNumber'])) {
-                update_post_meta($order_id, 'optima_invoice_number', $result['fullNumber']);
-            }
-
-            // Add a note to the order
-            $order->add_order_note(
-                sprintf(
-                    __('Utworzono fakturę w Optima: %s (%s)', 'optima-woocommerce'),
-                    $result['id'],
-                    $result['fullNumber'] ?? ''
-                )
-            );
-
-            // Store the document type in the order meta
-            update_post_meta($order_id, 'optima_document_type', 'invoice');
-            update_post_meta($order_id, 'optima_document_status', 'paid');
-        } elseif (is_array($result) && isset($result['error']) && $result['error'] === true) {
-            // Handle specific error response
-            $error_message = isset($result['message']) ? $result['message'] : __('Nieznany błąd', 'optima-woocommerce');
-            $status_code = isset($result['status_code']) ? $result['status_code'] : '';
-
-            // Add a note to the order with detailed error information
-            $detailed_error = $error_message;
-
-            // Add more details if available
-            if (isset($result['optima_request']) && is_array($result['optima_request'])) {
-                $detailed_error .= "\n\nDane wysłane do Optima:";
-                $detailed_error .= "\n" . json_encode($result['optima_request'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-            }
-
-            // Add response details if available
-            if (isset($result['optima_response'])) {
-                $response_data = json_decode($result['optima_response'], true);
-                if (is_array($response_data) && isset($response_data['ModelState'])) {
-                    $detailed_error .= "\n\nBłędy walidacji:";
-                    foreach ($response_data['ModelState'] as $field => $errors) {
-                        if (is_array($errors)) {
-                            foreach ($errors as $error) {
-                                $detailed_error .= "\n- " . $field . ": " . $error;
-                            }
-                        } else {
-                            $detailed_error .= "\n- " . $field . ": " . $errors;
-                        }
-                    }
-                }
-            }
-
-            // Create a more detailed error message with timestamp and request information
-            $error_timestamp = current_time('Y-m-d H:i:s');
-            $enhanced_error = sprintf(
-                __('Nie udało się utworzyć faktury w Optima. [%s] Błąd %s:', 'optima-woocommerce'),
-                $error_timestamp,
-                $status_code
-            );
-
-            // Add the detailed error message
-            $enhanced_error .= "\n\n" . $detailed_error;
-
-            // Add request URL and method if available
-            if (isset($result['request_url'])) {
-                $enhanced_error .= "\n\nURL: " . $result['request_url'];
-            }
-
-            if (isset($result['request_method'])) {
-                $enhanced_error .= "\nMetoda: " . $result['request_method'];
-            }
-
-            // Add request headers if available (sanitized)
-            if (isset($result['request_headers']) && is_array($result['request_headers'])) {
-                $enhanced_error .= "\n\nNagłówki zapytania:";
-                foreach ($result['request_headers'] as $header => $value) {
-                    // Skip sensitive headers like Authorization
-                    if (strtolower($header) !== 'authorization') {
-                        $enhanced_error .= "\n- " . $header . ": " . $value;
-                    }
-                }
-            }
-
-            // Log the error to the error log as well
-            error_log(sprintf(
-                'Optima API Error [%s]: %s - %s',
-                $error_timestamp,
-                $status_code,
-                $error_message
-            ));
-
-            $order->add_order_note($enhanced_error);
-
-            error_log(sprintf(__('Integracja WC Optima: Błąd podczas tworzenia faktury dla zamówienia %s: %s', 'optima-woocommerce'), $order_id, $error_message));
-        } else {
-            // Generic failure
-            $order->add_order_note(
-                __('Nie udało się utworzyć faktury w Optima.', 'optima-woocommerce')
-            );
-            error_log(sprintf(__('Integracja WC Optima: Nie udało się utworzyć faktury dla zamówienia %s', 'optima-woocommerce'), $order_id));
         }
     }
 }

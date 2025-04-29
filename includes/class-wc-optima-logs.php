@@ -83,8 +83,8 @@ class WC_Optima_Logs
                 'timestamp' => current_time('mysql'),
                 'endpoint' => $endpoint,
                 'request_method' => $method,
-                'request_data' => is_array($sanitized_request) || is_object($sanitized_request) ? json_encode($sanitized_request, JSON_UNESCAPED_UNICODE) : $sanitized_request,
-                'response_data' => is_array($sanitized_response) || is_object($sanitized_response) ? json_encode($sanitized_response, JSON_UNESCAPED_UNICODE) : $sanitized_response,
+                'request_data' => is_array($sanitized_request) || is_object($sanitized_request) ? json_encode($sanitized_request, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $sanitized_request,
+                'response_data' => is_array($sanitized_response) || is_object($sanitized_response) ? json_encode($sanitized_response, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) : $sanitized_response,
                 'status_code' => $status_code,
                 'success' => $success ? 1 : 0
             ),
@@ -181,7 +181,7 @@ class WC_Optima_Logs
         if (is_array($data)) {
             // Remove sensitive fields
             $sensitive_fields = array('password', 'access_token', 'Authorization', 'authorization');
-            
+
             foreach ($data as $key => $value) {
                 if (in_array($key, $sensitive_fields, true)) {
                     $data[$key] = '***REDACTED***';
