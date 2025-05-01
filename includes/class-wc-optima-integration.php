@@ -131,14 +131,15 @@ class WC_Optima_Integration
         register_deactivation_hook(OPTIMA_WC_PLUGIN_FILE, array($this, 'deactivate_plugin'));
 
         // Add hook for customer creation in Optima
-        add_action('woocommerce_checkout_order_processed', array($this->customer, 'process_customer_for_optima'), 10, 3);
+        // Process customer *before* RO creation
+        add_action('woocommerce_checkout_order_processed', array($this->customer, 'process_customer_for_optima'), 5, 3);
 
         // Ensure order status is set to "pending" after checkout
         add_action('woocommerce_checkout_order_processed', function ($order_id, $posted_data, $order) {
             if ($order->get_status() !== 'pending') {
                 $order->update_status('pending', __('Status ustawiony na "oczekuje na oplacenie" przez integrację Optima', 'optima-woocommerce'));
             }
-        }, 20, 3);
+        }, 20, 3); // Keep this at 20
 
         // Ensure order status is set to "processing" after payment
         add_action('woocommerce_payment_complete', function ($order_id) {
@@ -146,10 +147,10 @@ class WC_Optima_Integration
             if ($order && $order->get_status() !== 'processing') {
                 $order->update_status('processing', __('Status ustawiony na "w trakcie realizacji" przez integrację Optima', 'optima-woocommerce'));
             }
-        }, 20, 1);
+        }, 20, 1); // Keep this at 20
 
-        // Add hook for RO document creation when a new order is created
-        add_action('woocommerce_new_order', array($this, 'create_ro_document_for_order'), 10, 1);
+        // Add hook for RO document creation *after* customer processing
+        add_action('woocommerce_checkout_order_processed', array($this, 'create_ro_document_for_order'), 25, 3); // Run after customer processing and status update
     }
 
     /**
@@ -316,14 +317,16 @@ class WC_Optima_Integration
     /**
      * Create RO document for order
      *
-     * When a new order is created in WooCommerce, we create an RO document in Optima
+     * When a new order is processed during checkout, we create an RO document in Optima
+     * This now runs *after* customer processing on the same hook.
      *
      * @param int $order_id Order ID
+     * @param array $posted_data Posted checkout data (unused but required by hook)
+     * @param WC_Order $order Order object
      */
-    public function create_ro_document_for_order($order_id)
+    public function create_ro_document_for_order($order_id, $posted_data, $order)
     {
-        // Get the order
-        $order = wc_get_order($order_id);
+        // Order object is passed directly now
 
         if (!$order) {
             error_log(sprintf(__('Integracja WC Optima: Nie znaleziono zamówienia - %s', 'optima-woocommerce'), $order_id));
@@ -406,10 +409,15 @@ class WC_Optima_Integration
             'recipient' => $payer_recipient
         ];
 
-        // Add customer data if available
-        $customer_id = get_post_meta($order_id, 'optima_customer_id', true);
-        if (!empty($customer_id)) {
-            $order_data['payerId'] = $customer_id;
+        // Add customer data if available (should be set by process_customer_for_optima now)
+        $optima_customer_id = $order->get_meta('_optima_customer_id', true);
+        if (!empty($optima_customer_id)) {
+            $order_data['payerId'] = $optima_customer_id;
+        } else {
+            // Log if customer ID is missing, as it should have been set
+            error_log(sprintf(__('Integracja WC Optima: Brak ID klienta Optima podczas tworzenia RO dla zamówienia %s. Klient mógł nie zostać poprawnie przetworzony.', 'optima-woocommerce'), $order_id));
+            // Optionally, decide if RO creation should proceed without a linked customer ID
+            // For now, we proceed but without linking the payer explicitly by ID
         }
 
         // Add products to order data
