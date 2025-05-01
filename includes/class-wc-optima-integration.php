@@ -148,9 +148,8 @@ class WC_Optima_Integration
             }
         }, 20, 1);
 
-        // Add hooks for RO document creation
-        add_action('woocommerce_payment_complete', array($this, 'create_ro_document_for_order'), 10, 1);
-        add_action('woocommerce_order_status_processing', array($this, 'create_ro_document_for_order'), 10, 1);
+        // Add hook for RO document creation when a new order is created
+        add_action('woocommerce_new_order', array($this, 'create_ro_document_for_order'), 10, 1);
     }
 
     /**
@@ -317,7 +316,7 @@ class WC_Optima_Integration
     /**
      * Create RO document for order
      *
-     * When an order is paid or processed, we create an RO document in Optima
+     * When a new order is created in WooCommerce, we create an RO document in Optima
      *
      * @param int $order_id Order ID
      */
@@ -385,7 +384,7 @@ class WC_Optima_Integration
         }
 
         $order_data = [
-            'type' => 302, // RO document type
+            'type' => 308, // RO document type
             'foreignNumber' => 'WC_' . $order->get_order_number(),
             'calculatedOn' => 1, // 1 = gross, 2 = net
             'paymentMethod' => 'przelew', // Fixed payment method that is known to work with Optima
@@ -426,7 +425,15 @@ class WC_Optima_Integration
             }
 
             $quantity = $item->get_quantity();
-            $unit_price = $item->get_total() / $quantity;
+            $unit_price_gross = $item->get_total() / $quantity;
+            $vat_rate = floatval($optima_vat_rate);
+
+            // Calculate net price from gross price
+            $unit_price_net = round($unit_price_gross / (1 + ($vat_rate / 100)), 2);
+
+            // Calculate total values
+            $total_net_value = round($unit_price_net * $quantity, 2);
+            $total_gross_value = round($unit_price_gross * $quantity, 2);
 
             // Always use productId approach when available
             if (!empty($optima_id)) {
@@ -444,10 +451,14 @@ class WC_Optima_Integration
                     'productId' => $optima_id,
                     'code' => $optima_code, // Use the Optima code field
                     'quantity' => $quantity,
-                    'price' => round($unit_price, 2),
-                    'vatRate' => floatval($optima_vat_rate),
+                    'price' => round($unit_price_gross, 2), // This is the gross price
+                    'vatRate' => $vat_rate,
                     'discount' => 0,
-                    'description' => $item->get_name()
+                    'description' => $item->get_name(),
+                    'unitNetPrice' => $unit_price_net,
+                    'unitGrossPrice' => $unit_price_gross,
+                    'totalNetValue' => $total_net_value,
+                    'totalGrossValue' => $total_gross_value
                 ];
             } else {
                 // Skip products without Optima ID
