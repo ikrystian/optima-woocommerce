@@ -1210,20 +1210,23 @@ class WC_Optima_Admin
     {
         // Get the Optima customer ID from order meta
         $optima_customer_id = $order->get_meta('_optima_customer_id', true);
+        // Get the Optima RO Document ID from order meta
+        $optima_ro_document_id = $order->get_meta('optima_ro_document_id', true);
 
-        // Only display if we have an Optima customer ID
-        if (empty($optima_customer_id)) {
+        // Only display the section if we have at least one ID
+        if (empty($optima_customer_id) && empty($optima_ro_document_id)) {
             return;
         }
 
     ?>
         <div class="order_data_column">
             <h4><?php _e('Integracja Optima', 'optima-woocommerce'); ?></h4>
-            <p>
-                <strong><?php _e('ID Klienta Optima:', 'optima-woocommerce'); ?></strong>
-                <?php echo esc_html($optima_customer_id); ?>
-            </p>
-        </div>
-<?php
-    }
-}
+            <?php if (!empty($optima_ro_document_id)): ?>
+                <p>
+                    <strong><?php _e('ID Dokumentu RO Optima:', 'optima-woocommerce'); ?></strong>
+                    <?php echo esc_html($optima_ro_document_id); ?>
+                </p>
+            <?php endif; ?>
+            <?php if (!empty($optima_customer_id)): ?>
+                <p>
+                    <strong><?php _e('ID Klienta Optima:', 'optima-woocommerce'); ?></strong>

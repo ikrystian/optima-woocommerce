@@ -392,7 +392,7 @@ class WC_Optima_Integration
 
         $order_data = [
             'type' => 308, // RO document type
-            'foreignNumber' => 'WC_' . $order->get_order_number(),
+            'foreignNumber' => $order->get_order_number(),
             'calculatedOn' => 1, // 1 = gross, 2 = net
             'paymentMethod' => $optima_payment_method, // Use mapped payment method from WooCommerce
             'currency' => $order->get_currency(),
