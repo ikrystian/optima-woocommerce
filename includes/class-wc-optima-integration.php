@@ -383,11 +383,15 @@ class WC_Optima_Integration
             ];
         }
 
+        // Get the payment method from the order
+        $payment_method = $order->get_payment_method();
+        $optima_payment_method = $this->map_wc_payment_method_to_optima($payment_method);
+
         $order_data = [
             'type' => 308, // RO document type
             'foreignNumber' => 'WC_' . $order->get_order_number(),
             'calculatedOn' => 1, // 1 = gross, 2 = net
-            'paymentMethod' => 'przelew', // Fixed payment method that is known to work with Optima
+            'paymentMethod' => $optima_payment_method, // Use mapped payment method from WooCommerce
             'currency' => $order->get_currency(),
             'elements' => [],
             'description' => sprintf(__('Zamówienie #%s z WooCommerce', 'optima-woocommerce'), $order->get_order_number()),
@@ -598,5 +602,48 @@ class WC_Optima_Integration
             );
             error_log(sprintf(__('Integracja WC Optima: Nie udało się utworzyć dokumentu RO dla zamówienia %s', 'optima-woocommerce'), $order_id));
         }
+    }
+
+    /**
+     * Map WooCommerce payment method to Optima payment method
+     *
+     * @param string $wc_payment_method WooCommerce payment method ID
+     * @return string Optima payment method
+     */
+    private function map_wc_payment_method_to_optima($wc_payment_method)
+    {
+        // Default payment method if mapping fails
+        $default_payment_method = 'przelew';
+
+        // Map common WooCommerce payment gateways to Optima payment methods
+        $payment_method_map = [
+            // Cash-based methods
+            'cod' => 'gotówka',                  // Cash on delivery
+            'cash' => 'gotówka',                 // Cash payment
+            'cheque' => 'gotówka',               // Check payment
+
+            // Bank transfer methods
+            'bacs' => 'przelew',                 // Direct bank transfer
+            'bank_transfer' => 'przelew',        // Bank transfer
+            'przelewy24' => 'przelew',           // Przelewy24
+            'dotpay' => 'przelew',               // Dotpay
+            'paypal' => 'przelew',               // PayPal
+            'stripe' => 'przelew',               // Stripe
+            'payu' => 'przelew',                 // PayU
+            'tpay' => 'przelew',                 // Tpay
+
+            // Credit card methods
+            'credit_card' => 'karta',            // Credit card
+            'stripe_cc' => 'karta',              // Stripe Credit Card
+            'paypal_cc' => 'karta',              // PayPal Credit Card
+
+            // Other methods
+            'other' => 'przelew',                // Other payment methods
+        ];
+
+        // Return the mapped payment method or the default if not found
+        return isset($payment_method_map[$wc_payment_method])
+            ? $payment_method_map[$wc_payment_method]
+            : $default_payment_method;
     }
 }

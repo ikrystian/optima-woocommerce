@@ -2,7 +2,7 @@
 
 /**
  * Customer handling class for Optima WooCommerce integration
- * 
+ *
  * @package Optima_WooCommerce
  */
 
@@ -35,7 +35,7 @@ class WC_Optima_Customer
 
     /**
      * Process customer for Optima when a new order is placed
-     * 
+     *
      * @param int $order_id The WooCommerce order ID
      * @param array $posted_data The posted data from checkout
      * @param WC_Order $order The WooCommerce order object
@@ -114,7 +114,7 @@ class WC_Optima_Customer
 
     /**
      * Check if a customer exists in Optima
-     * 
+     *
      * @param string $email Customer email
      * @param string $vat_number Customer VAT number (optional)
      * @return array|false Customer data if found, false otherwise
@@ -150,7 +150,7 @@ class WC_Optima_Customer
 
     /**
      * Map WooCommerce customer data to Optima format
-     * 
+     *
      * @param int $customer_id WooCommerce customer ID
      * @param WC_Order $order WooCommerce order object
      * @return array Customer data in Optima format
@@ -198,7 +198,11 @@ class WC_Optima_Customer
         // Default values
         $inactive = 0;
         $defaultPrice = 0;
-        $paymentMethod = 'gotówka';
+
+        // Get payment method from order and map it to Optima format
+        $wc_payment_method = $order->get_payment_method();
+        $paymentMethod = $this->map_wc_payment_method_to_optima($wc_payment_method);
+
         $dateOfPayment = 0;
         $maxPaymentDelay = 0;
         $description = __('Klient utworzony z WooCommerce', 'optima-woocommerce');
@@ -264,5 +268,48 @@ class WC_Optima_Customer
         }
 
         return $customer_data;
+    }
+
+    /**
+     * Map WooCommerce payment method to Optima payment method
+     *
+     * @param string $wc_payment_method WooCommerce payment method ID
+     * @return string Optima payment method
+     */
+    private function map_wc_payment_method_to_optima($wc_payment_method)
+    {
+        // Default payment method if mapping fails
+        $default_payment_method = 'przelew';
+
+        // Map common WooCommerce payment gateways to Optima payment methods
+        $payment_method_map = [
+            // Cash-based methods
+            'cod' => 'gotówka',                  // Cash on delivery
+            'cash' => 'gotówka',                 // Cash payment
+            'cheque' => 'gotówka',               // Check payment
+
+            // Bank transfer methods
+            'bacs' => 'przelew',                 // Direct bank transfer
+            'bank_transfer' => 'przelew',        // Bank transfer
+            'przelewy24' => 'przelew',           // Przelewy24
+            'dotpay' => 'przelew',               // Dotpay
+            'paypal' => 'przelew',               // PayPal
+            'stripe' => 'przelew',               // Stripe
+            'payu' => 'przelew',                 // PayU
+            'tpay' => 'przelew',                 // Tpay
+
+            // Credit card methods
+            'credit_card' => 'karta',            // Credit card
+            'stripe_cc' => 'karta',              // Stripe Credit Card
+            'paypal_cc' => 'karta',              // PayPal Credit Card
+
+            // Other methods
+            'other' => 'przelew',                // Other payment methods
+        ];
+
+        // Return the mapped payment method or the default if not found
+        return isset($payment_method_map[$wc_payment_method])
+            ? $payment_method_map[$wc_payment_method]
+            : $default_payment_method;
     }
 }
